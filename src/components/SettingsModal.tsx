@@ -273,10 +273,6 @@ export default function SettingsModal({
         "nota-vault": {
           command: "node",
           args: ["/path/to/nota/mcp-server/index.js"],
-          env: {
-            NEXT_PUBLIC_SUPABASE_URL: "YOUR_SUPABASE_URL",
-            SUPABASE_SERVICE_ROLE_KEY: "YOUR_SERVICE_ROLE_KEY",
-          },
         },
       },
     },
@@ -291,10 +287,6 @@ export default function SettingsModal({
           "nota-vault": {
             command: "node",
             args: ["/path/to/nota/mcp-server/index.js"],
-            env: {
-              NEXT_PUBLIC_SUPABASE_URL: "YOUR_SUPABASE_URL",
-              SUPABASE_SERVICE_ROLE_KEY: "YOUR_SERVICE_ROLE_KEY",
-            },
           },
         },
       },
