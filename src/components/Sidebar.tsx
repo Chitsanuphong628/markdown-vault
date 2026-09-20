@@ -15,6 +15,7 @@ import {
   Search,
   BookOpen,
   Sparkles,
+  Settings,
 } from "lucide-react";
 
 import { Language, I18N_MAIN } from "@/lib/i18n";
@@ -49,6 +50,7 @@ interface SidebarProps {
   onDeleteNote: (id: string) => Promise<void>;
   onMoveNote?: (noteId: string, targetFolderId: string | null) => Promise<void>;
   onMoveFolder?: (folderId: string, targetParentId: string | null) => Promise<void>;
+  onOpenSettings?: () => void;
   onLogout: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -71,6 +73,7 @@ export default function Sidebar({
   onDeleteNote,
   onMoveNote,
   onMoveFolder,
+  onOpenSettings,
   onLogout,
   searchQuery,
   setSearchQuery,
@@ -177,6 +180,15 @@ export default function Sidebar({
         </div>
 
         <div className="flex items-center gap-1">
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              title="Settings & Integrations (⌘,)"
+              className="p-1.5 text-neutral-400 hover:text-indigo-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onLogout}
             title={t.logoutTitle}

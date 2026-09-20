@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import DropzoneModal from "@/components/DropzoneModal";
+import SettingsModal from "@/components/SettingsModal";
 import {
   FileText,
   UploadCloud,
@@ -50,6 +51,9 @@ export default function AppHome() {
   // Upload Modal
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
+  // Settings Modal
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   // Check auth on mount
   useEffect(() => {
     fetch("/api/auth/me")
@@ -70,13 +74,17 @@ export default function AppHome() {
       });
   }, [router]);
 
-  // Global Keyboard shortcuts (Cmd/Ctrl + K for search, Escape to exit edit)
+  // Global Keyboard shortcuts (Cmd/Ctrl + K for search, Cmd/Ctrl + , for settings)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         const searchInput = document.querySelector('input[type="text"][placeholder*="Search"], input[type="text"][placeholder*="ค้นหา"]') as HTMLInputElement;
         if (searchInput) searchInput.focus();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -326,6 +334,7 @@ export default function AppHome() {
         onDeleteNote={handleDeleteNote}
         onMoveNote={handleMoveNote}
         onMoveFolder={handleMoveFolder}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -591,6 +600,13 @@ export default function AppHome() {
           loadFolders();
           loadNotes();
         }}
+      />
+
+      {/* Settings & Integrations Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        user={user}
       />
     </div>
   );
