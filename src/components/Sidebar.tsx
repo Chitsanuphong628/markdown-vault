@@ -58,6 +58,8 @@ interface SidebarProps {
   onLogout: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export default function Sidebar({
@@ -83,6 +85,8 @@ export default function Sidebar({
   onLogout,
   searchQuery,
   setSearchQuery,
+  isOpenMobile = false,
+  onCloseMobile,
 }: SidebarProps) {
   const t = I18N_MAIN[lang];
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
@@ -203,41 +207,64 @@ export default function Sidebar({
   const getNotesInFolder = (folderId: string) => notes.filter((n) => n.folderId === folderId);
 
   return (
-    <aside className="w-72 bg-neutral-900/95 border-r border-neutral-800/80 flex flex-col h-full select-none shrink-0 shadow-2xl z-20 backdrop-blur-md">
-      {/* App Branding & User Profile */}
-      <div className="p-3.5 border-b border-neutral-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-neutral-950/80 border border-neutral-800 flex items-center justify-center shadow-md shadow-indigo-500/10 shrink-0 p-1.5">
-            <Image
-              src="/logo.png"
-              alt="Nota Logo"
-              width={24}
-              height={24}
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <h2 className="font-bold text-sm tracking-tight text-neutral-100">
-              {t.appName}
-            </h2>
-            <p className="text-[11px] text-neutral-400 truncate max-w-[125px]">
-              {user.name || user.email}
-            </p>
-          </div>
-        </div>
+    <>
+      {/* Mobile Drawer Backdrop */}
+      {isOpenMobile && (
+        <div
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden animate-in fade-in duration-200"
+        />
+      )}
 
-        <div className="flex items-center gap-1">
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              title="Settings & Integrations (⌘,)"
-              className="p-1.5 text-neutral-400 hover:text-indigo-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          )}
+      <aside
+        className={`w-72 bg-neutral-900/95 border-r border-neutral-800/80 flex flex-col h-full select-none shrink-0 shadow-2xl backdrop-blur-md transition-transform duration-300 ease-in-out
+          fixed inset-y-0 left-0 z-50 md:relative md:z-20 md:translate-x-0
+          ${isOpenMobile ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+      >
+        {/* App Branding & User Profile */}
+        <div className="p-3.5 border-b border-neutral-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-neutral-950/80 border border-neutral-800 flex items-center justify-center shadow-md shadow-indigo-500/10 shrink-0 p-1.5">
+              <Image
+                src="/logo.png"
+                alt="Nota Logo"
+                width={24}
+                height={24}
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-bold text-sm tracking-tight text-neutral-100">
+                {t.appName}
+              </h2>
+              <p className="text-[11px] text-neutral-400 truncate max-w-[125px]">
+                {user.name || user.email}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                title="Settings & Integrations (⌘,)"
+                className="p-1.5 text-neutral-400 hover:text-indigo-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Mobile Close Drawer Button */}
+            {onCloseMobile && (
+              <button
+                onClick={onCloseMobile}
+                className="md:hidden p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer ml-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
 
       {/* Compact Action Bar & Search (Linear / VS Code style) */}
       <div className="px-3 pt-2.5 pb-1 space-y-2">
@@ -574,5 +601,6 @@ export default function Sidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

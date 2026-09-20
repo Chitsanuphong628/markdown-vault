@@ -18,6 +18,7 @@ import {
   Lock,
   Sparkles,
   Search,
+  Menu,
 } from "lucide-react";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 
@@ -71,6 +72,9 @@ export default function AppHome() {
 
   // Settings Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Mobile Drawer State
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Check auth on mount
   useEffect(() => {
@@ -384,15 +388,23 @@ export default function AppHome() {
         selectedFolderId={selectedFolderId}
         lang={lang}
         setLang={setLang}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onSelectNote={(id) => {
           setActiveNoteId(id);
           setIsEditing(false);
+          setIsMobileSidebarOpen(false);
         }}
-        onSelectFolder={(id) => setSelectedFolderId(id)}
+        onSelectFolder={(id) => {
+          setSelectedFolderId(id);
+        }}
         onOpenUpload={() => setIsUploadOpen(true)}
         onCreateFolder={handleCreateFolder}
         onDeleteFolder={handleDeleteFolder}
-        onCreateNote={handleCreateNote}
+        onCreateNote={async (fId) => {
+          await handleCreateNote(fId);
+          setIsMobileSidebarOpen(false);
+        }}
         onDeleteNote={handleDeleteNote}
         onRenameNote={handleRenameNote}
         onRenameFolder={handleRenameFolder}
@@ -409,8 +421,17 @@ export default function AppHome() {
         {activeNote ? (
           <>
             {/* Top Toolbar */}
-            <div className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/40 backdrop-blur-md z-10">
-              <div className="flex items-center gap-3 truncate min-w-0">
+            <div className="h-14 border-b border-neutral-800/80 px-3 sm:px-6 flex items-center justify-between bg-neutral-900/40 backdrop-blur-md z-10">
+              <div className="flex items-center gap-2 sm:gap-3 truncate min-w-0">
+                {/* Mobile Menu Hamburger Button */}
+                <button
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer shrink-0"
+                  title="Open Sidebar"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+
                 <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
@@ -448,22 +469,24 @@ export default function AppHome() {
                     {/* Share Button */}
                     <button
                       onClick={() => setIsShareModalOpen(true)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      title={t.shareNote}
+                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                         isShared
                           ? "bg-emerald-600/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/25"
                           : "bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50"
                       }`}
                     >
                       <Share2 className="w-3.5 h-3.5" />
-                      <span>{t.shareNote}</span>
+                      <span className="hidden sm:inline">{t.shareNote}</span>
                     </button>
 
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                      title={t.editNote}
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>{t.editNote}</span>
+                      <span className="hidden sm:inline">{t.editNote}</span>
                     </button>
                     <button
                       onClick={() => {
@@ -483,7 +506,7 @@ export default function AppHome() {
 
             {/* Note Body: Markdown Viewer OR Editor */}
             {isEditing ? (
-              <div className="flex-1 flex flex-col p-8 space-y-5 overflow-y-auto max-w-5xl mx-auto w-full">
+              <div className="flex-1 flex flex-col p-4 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto max-w-5xl mx-auto w-full">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     {t.noteTitleLabel}
@@ -527,14 +550,25 @@ export default function AppHome() {
           </>
         ) : (
           /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center relative">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 text-center relative">
+            {/* Mobile Top Bar with Menu button for Empty State */}
+            <div className="md:hidden absolute top-4 left-4 z-10">
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="p-2 text-neutral-400 hover:text-neutral-100 bg-neutral-900/90 border border-neutral-800 rounded-xl shadow-lg transition-colors cursor-pointer flex items-center gap-2 text-xs"
+              >
+                <Menu className="w-4 h-4" />
+                <span>Menu</span>
+              </button>
+            </div>
+
             {/* Subtle background glow */}
             <div className="absolute w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -top-20" />
             
-            <div className="w-20 h-20 rounded-3xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-6 shadow-2xl shadow-indigo-500/10 ring-1 ring-neutral-800">
-              <UploadCloud className="w-9 h-9 animate-pulse" />
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-5 sm:mb-6 shadow-2xl shadow-indigo-500/10 ring-1 ring-neutral-800">
+              <UploadCloud className="w-8 h-8 sm:w-9 sm:h-9 animate-pulse" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-neutral-100 mb-3 tracking-tight">
+            <h2 className="text-xl sm:text-3xl font-bold text-neutral-100 mb-2.5 sm:mb-3 tracking-tight">
               {t.emptyHeroTitle}
             </h2>
             <p className="text-neutral-400 text-sm max-w-lg mb-8 leading-relaxed">

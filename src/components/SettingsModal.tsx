@@ -327,15 +327,15 @@ export default function SettingsModal({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-150 cursor-pointer"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl bg-[#0d0f15] border border-[#202430] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[580px] max-h-[90vh] cursor-default font-sans antialiased text-neutral-200"
+        className="w-full h-full sm:h-[580px] sm:max-w-3xl bg-[#0d0f15] border-0 sm:border border-[#202430] rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:max-h-[90vh] cursor-default font-sans antialiased text-neutral-200"
       >
         {/* HUD Top Bar */}
-        <div className="h-12 border-b border-[#202430] px-5 flex items-center justify-between bg-[#11131c] shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="h-12 border-b border-[#202430] px-4 sm:px-5 flex items-center justify-between bg-[#11131c] shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <div className="w-6 h-6 rounded bg-[#161924] border border-[#272d3d] flex items-center justify-center p-1 shadow-xs">
               <Image
                 src="/logo.png"
@@ -346,7 +346,7 @@ export default function SettingsModal({
               />
             </div>
             <span className="font-bold text-xs tracking-tight text-neutral-100">{t.settingsTitle}</span>
-            <span className="text-[10px] text-neutral-500 font-mono bg-[#161924] border border-[#272d3d] px-1.5 py-0.5 rounded">
+            <span className="hidden sm:inline-block text-[10px] text-neutral-500 font-mono bg-[#161924] border border-[#272d3d] px-1.5 py-0.5 rounded">
               ESC
             </span>
           </div>
@@ -355,71 +355,71 @@ export default function SettingsModal({
             onClick={onClose}
             className="p-1 text-neutral-500 hover:text-neutral-200 hover:bg-[#1c202d] rounded-lg transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
         {/* HUD Body */}
-        <div className="flex-1 flex min-h-0">
-          {/* Left Navigation Sidebar */}
-          <aside className="w-52 border-r border-[#202430] bg-[#090b10] p-2 space-y-1 shrink-0">
-            <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 py-1">
+        <div className="flex-1 flex flex-col sm:flex-row min-h-0">
+          {/* Navigation Tabs (Horizontal on mobile, Sidebar on desktop) */}
+          <aside className="w-full sm:w-52 border-b sm:border-b-0 sm:border-r border-[#202430] bg-[#090b10] p-2 flex sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible shrink-0">
+            <div className="hidden sm:block text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 py-1">
               {t.tabPreferences}
             </div>
             <button
               onClick={() => setActiveTab("general")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
+              className={`flex items-center gap-2 sm:gap-2.5 px-3 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border whitespace-nowrap ${
                 activeTab === "general"
                   ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
-              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>{t.tabGeneral}</span>
             </button>
 
             <button
               onClick={() => setActiveTab("account")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
+              className={`flex items-center gap-2 sm:gap-2.5 px-3 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border whitespace-nowrap ${
                 activeTab === "account"
                   ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
-              <User className="w-3.5 h-3.5 text-neutral-400" />
+              <User className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
               <span>{t.tabAccount}</span>
             </button>
 
-            <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 pt-3 pb-1">
+            <div className="hidden sm:block text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 pt-3 pb-1">
               {t.tabDataGroup}
             </div>
             <button
               onClick={() => setActiveTab("data")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
+              className={`flex items-center gap-2 sm:gap-2.5 px-3 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border whitespace-nowrap ${
                 activeTab === "data"
                   ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
-              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>{t.tabVault}</span>
             </button>
 
             <button
               onClick={() => setActiveTab("mcp")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
+              className={`flex items-center gap-2 sm:gap-2.5 px-3 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border whitespace-nowrap ${
                 activeTab === "mcp"
                   ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
-              <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+              <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>{t.tabMcp}</span>
             </button>
           </aside>
 
           {/* Right Content View */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5">
             {activeTab === "mcp" ? (
               <>
                 {/* Status Bar */}

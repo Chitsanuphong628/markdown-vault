@@ -109,21 +109,21 @@ export default function DropzoneModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-800">
           <div className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-indigo-400" />
-            <h3 className="font-semibold text-neutral-100">{t.importModalTitle}</h3>
+            <h3 className="font-semibold text-neutral-100 text-sm sm:text-base">{t.importModalTitle}</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
           {/* Target Folder Selector */}
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
