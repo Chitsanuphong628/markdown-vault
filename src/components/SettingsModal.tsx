@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   Download,
-  AlertTriangle,
   Loader2,
 } from "lucide-react";
 import Image from "next/image";
@@ -363,8 +362,7 @@ export default function SettingsModal({
               <>
                 {/* Status Bar */}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-[#11141d] border border-[#202430]">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-neutral-200">
                       MCP Server: <span className="text-emerald-400">Online</span>
                     </span>
@@ -560,47 +558,47 @@ export default function SettingsModal({
                 </div>
 
                 {/* Danger Zone: Account Deletion */}
-                <div className="border border-rose-950/40 bg-rose-950/10 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-rose-400">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Danger Zone
-                  </div>
-                  <div className="text-xs text-neutral-400 leading-relaxed">
-                    Permanently delete your account, notes, and folders from Supabase. This action cannot be undone.
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-rose-400">
+                        Danger Zone
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        Permanently delete your account, notes, and folders. This action cannot be undone.
+                      </div>
+                    </div>
+                    {!showDeleteConfirm && (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-mono font-medium transition-all shrink-0"
+                      >
+                        Delete Account
+                      </button>
+                    )}
                   </div>
 
-                  {!showDeleteConfirm ? (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-mono font-medium transition-all"
-                    >
-                      Delete Account
-                    </button>
-                  ) : (
-                    <div className="p-3 bg-[#0c0e14] border border-rose-900/30 rounded-lg space-y-2.5">
+                  {/* Confirmation Inline Row */}
+                  {showDeleteConfirm && (
+                    <div className="pt-3 border-t border-[#1e2330] space-y-2.5">
                       <div className="text-xs text-neutral-300">
-                        Please type <code className="font-mono text-rose-300 bg-rose-950/50 px-1 py-0.5 rounded border border-rose-800/40">{user.email}</code> to confirm:
+                        Type <code className="font-mono text-rose-300 bg-rose-950/40 px-1 py-0.5 rounded border border-rose-900/40">{user.email}</code> to confirm deletion:
                       </div>
-                      <input
-                        type="text"
-                        value={deleteConfirmText}
-                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        placeholder={user.email}
-                        className="w-full bg-[#11141d] border border-[#202430] focus:border-rose-500/50 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 font-mono outline-none"
-                      />
-                      {deleteError && (
-                        <div className="text-[11px] text-rose-400 font-mono">
-                          {deleteError}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={deleteConfirmText}
+                          onChange={(e) => setDeleteConfirmText(e.target.value)}
+                          placeholder={user.email}
+                          className="flex-1 bg-[#090b10] border border-[#202430] focus:border-rose-500/50 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 font-mono outline-none"
+                        />
                         <button
                           onClick={handleDeleteAccount}
                           disabled={deleteConfirmText !== user.email || isDeletingAccount}
-                          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-medium transition-all disabled:opacity-30 disabled:hover:bg-rose-600 flex items-center gap-1.5"
+                          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-medium transition-all disabled:opacity-30 disabled:hover:bg-rose-600 flex items-center gap-1.5 shrink-0"
                         >
                           {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          {isDeletingAccount ? "Deleting..." : "Permanently Delete"}
+                          {isDeletingAccount ? "Deleting..." : "Confirm Delete"}
                         </button>
                         <button
                           onClick={() => {
@@ -608,11 +606,16 @@ export default function SettingsModal({
                             setDeleteConfirmText("");
                             setDeleteError("");
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] text-neutral-400 text-xs font-mono transition-all"
+                          className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] text-neutral-400 text-xs font-mono transition-all shrink-0"
                         >
                           Cancel
                         </button>
                       </div>
+                      {deleteError && (
+                        <div className="text-[11px] text-rose-400 font-mono">
+                          {deleteError}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
