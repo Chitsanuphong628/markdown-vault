@@ -1,8 +1,21 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { UploadCloud, X, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { UploadCloud, X, FileText, CheckCircle2, AlertCircle, Loader2, Database } from "lucide-react";
 import { Language, I18N_MAIN } from "@/lib/i18n";
+import { convertFileToMarkdown } from "@/lib/dataIngest";
+
+const SUPPORTED_EXTENSIONS = [".md", ".markdown", ".csv", ".tsv", ".json"];
+
+function isSupportedFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    SUPPORTED_EXTENSIONS.some((ext) => name.endsWith(ext)) ||
+    file.type === "text/markdown" ||
+    file.type === "text/csv" ||
+    file.type === "application/json"
+  );
+}
 
 interface DropzoneModalProps {
   isOpen: boolean;
@@ -45,19 +58,15 @@ export default function DropzoneModal({
     setIsDragging(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const mdFiles = Array.from(e.dataTransfer.files).filter(
-        (file) => file.name.endsWith(".md") || file.name.endsWith(".markdown") || file.type === "text/markdown"
-      );
-      setFilesToUpload((prev) => [...prev, ...mdFiles]);
+      const validFiles = Array.from(e.dataTransfer.files).filter(isSupportedFile);
+      setFilesToUpload((prev) => [...prev, ...validFiles]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const mdFiles = Array.from(e.target.files).filter(
-        (file) => file.name.endsWith(".md") || file.name.endsWith(".markdown") || file.type === "text/markdown"
-      );
-      setFilesToUpload((prev) => [...prev, ...mdFiles]);
+      const validFiles = Array.from(e.target.files).filter(isSupportedFile);
+      setFilesToUpload((prev) => [...prev, ...validFiles]);
     }
   };
 
@@ -72,15 +81,15 @@ export default function DropzoneModal({
 
     try {
       for (const file of filesToUpload) {
-        const text = await file.text();
-        const title = file.name.replace(/\.(md|markdown)$/i, "");
+        // Convert CSV, TSV, JSON, or MD to clean Markdown
+        const { title, markdown } = await convertFileToMarkdown(file);
 
         await fetch("/api/notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title,
-            content: text,
+            content: markdown,
             folderId: selectedFolder || null,
           }),
         });
@@ -151,7 +160,7 @@ export default function DropzoneModal({
               ref={fileInputRef}
               onChange={handleFileChange}
               multiple
-              accept=".md,.markdown"
+              accept=".md,.markdown,.csv,.tsv,.json,text/markdown,text/csv,application/json"
               className="hidden"
             />
             <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
@@ -170,29 +179,36 @@ export default function DropzoneModal({
                 {t.selectedFilesTitle}
               </div>
               <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                {filesToUpload.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between bg-neutral-950/80 px-3 py-2 rounded-lg border border-neutral-800 text-xs"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <span className="truncate text-neutral-300">{file.name}</span>
-                      <span className="text-neutral-500 shrink-0">
-                        ({(file.size / 1024).toFixed(1)} KB)
-                      </span>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveFile(idx);
-                      }}
-                      className="text-neutral-500 hover:text-rose-400 p-1 rounded"
+                {filesToUpload.map((file, idx) => {
+                  const isData = file.name.match(/\.(csv|tsv|json)$/i);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-neutral-950/80 px-3 py-2 rounded-lg border border-neutral-800 text-xs"
                     >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2 truncate">
+                        {isData ? (
+                          <Database className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                        )}
+                        <span className="truncate text-neutral-300">{file.name}</span>
+                        <span className="text-neutral-500 shrink-0">
+                          ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFile(idx);
+                        }}
+                        className="text-neutral-500 hover:text-rose-400 p-1 rounded"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
