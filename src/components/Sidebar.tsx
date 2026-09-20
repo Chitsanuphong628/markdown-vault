@@ -321,12 +321,12 @@ export default function Sidebar({
           onDragOver={(e) => handleDragOver(e, "root")}
           onDragLeave={(e) => handleDragLeave(e, "root")}
           onDrop={(e) => handleDrop(e, null)}
-          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors outline-none border ${
             dragOverTarget === "root"
               ? "bg-indigo-600/20 border-2 border-dashed border-indigo-500 text-indigo-300 scale-[1.01]"
               : selectedFolderId === null && !activeNoteId
-              ? "bg-neutral-800 text-neutral-100 font-medium shadow-xs"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
+              ? "bg-neutral-800 text-neutral-100 font-medium shadow-xs border-neutral-700/60"
+              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40 border-transparent"
           }`}
         >
           <div className="flex items-center gap-2">
@@ -359,12 +359,12 @@ export default function Sidebar({
                   onSelectFolder(folder.id);
                   setOpenFolders((p) => ({ ...p, [folder.id]: !p[folder.id] }));
                 }}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-150 ${
+                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors outline-none border ${
                   isDragOver
-                    ? "bg-indigo-600/25 border border-indigo-500 text-indigo-200 ring-2 ring-indigo-500/30 scale-[1.01]"
+                    ? "bg-indigo-600/25 border-indigo-500 text-indigo-200 ring-2 ring-indigo-500/30 scale-[1.01]"
                     : isSelected
-                    ? "bg-indigo-950/40 text-indigo-300 font-medium"
-                    : "text-neutral-300 hover:bg-neutral-800/60"
+                    ? "bg-indigo-950/40 text-indigo-300 font-medium border-indigo-500/30"
+                    : "text-neutral-300 hover:bg-neutral-800/60 border-transparent"
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">
@@ -447,10 +447,10 @@ export default function Sidebar({
                         draggable={renamingId !== note.id}
                         onDragStart={(e) => handleDragStartNote(e, note.id)}
                         onClick={() => onSelectNote(note.id)}
-                        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-all ${
+                        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors outline-none border ${
                           activeNoteId === note.id
-                            ? "bg-neutral-800/90 text-neutral-100 font-medium border border-neutral-700/60 shadow-sm"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
+                            ? "bg-neutral-800/90 text-neutral-100 font-medium border-neutral-700/60 shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40 border-transparent"
                         }`}
                       >
                         <div className="flex items-center gap-1.5 truncate flex-1 min-w-0 mr-2">
@@ -521,10 +521,10 @@ export default function Sidebar({
                 draggable={renamingId !== note.id}
                 onDragStart={(e) => handleDragStartNote(e, note.id)}
                 onClick={() => onSelectNote(note.id)}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-all ${
+                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors outline-none border ${
                   activeNoteId === note.id
-                    ? "bg-neutral-800/90 text-neutral-100 font-medium border border-neutral-700/60 shadow-sm"
-                    : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
+                    ? "bg-neutral-800/90 text-neutral-100 font-medium border-neutral-700/60 shadow-sm"
+                    : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40 border-transparent"
                 }`}
               >
                 <div className="flex items-center gap-2 truncate flex-1 min-w-0 mr-2">
