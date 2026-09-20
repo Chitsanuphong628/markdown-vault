@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -105,10 +105,14 @@ function CodeBlock({ className, children, ...props }: any) {
 
 export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewerProps) {
   const [content, setContent] = useState(note.content);
+  const checkboxIndexRef = useRef(0);
 
   useEffect(() => {
     setContent(note.content);
   }, [note.content]);
+
+  // Reset checkbox index before each render pass
+  checkboxIndexRef.current = 0;
 
   // Extract headings for Table of Contents
   const headings = useMemo(() => {
@@ -162,9 +166,6 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
     }
   };
 
-  // Keep track of checkbox index during render
-  let checkboxCounter = 0;
-
   return (
     <div className="flex-1 flex overflow-y-auto">
       <div className="flex-1 max-w-4xl mx-auto px-6 py-8 min-w-0">
@@ -209,15 +210,19 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
             rehypePlugins={[rehypeSlug]}
             components={{
               code: CodeBlock,
-              input: ({ type, checked, ...props }: any) => {
+              input: ({ type, checked, disabled, ...props }: any) => {
                 if (type === "checkbox") {
-                  const thisIndex = checkboxCounter++;
+                  const thisIndex = checkboxIndexRef.current++;
                   return (
                     <input
                       type="checkbox"
                       checked={Boolean(checked)}
-                      onChange={() => handleToggleCheckbox(thisIndex)}
-                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600"
+                      disabled={false} // Explicitly remove remark-gfm disabled flag!
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleToggleCheckbox(thisIndex);
+                      }}
+                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto"
                       {...props}
                     />
                   );
