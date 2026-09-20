@@ -23,7 +23,25 @@ import { Language, I18N_MAIN } from "@/lib/i18n";
 
 export default function AppHome() {
   const router = useRouter();
-  const [lang, setLang] = useState<Language>("en");
+  const [lang, setLangState] = useState<Language>("en");
+
+  // Load language from localStorage on mount
+  useEffect(() => {
+    const savedLang = localStorage.getItem("nota_lang") as Language;
+    if (savedLang === "en" || savedLang === "th") {
+      setLangState(savedLang);
+    }
+  }, []);
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    try {
+      localStorage.setItem("nota_lang", newLang);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const t = I18N_MAIN[lang];
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);

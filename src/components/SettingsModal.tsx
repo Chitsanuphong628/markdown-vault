@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import JSZip from "jszip";
-import { Language } from "@/lib/i18n";
+import { Language, I18N_MAIN } from "@/lib/i18n";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -58,6 +58,7 @@ export default function SettingsModal({
   lang = "en",
   setLang,
 }: SettingsModalProps) {
+  const t = I18N_MAIN[lang] || I18N_MAIN.en;
   const [activeTab, setActiveTab] = useState<"general" | "account" | "data" | "mcp">("general");
   const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
@@ -322,7 +323,7 @@ export default function SettingsModal({
                 className="w-full h-full object-contain"
               />
             </div>
-            <span className="font-bold text-xs tracking-tight text-neutral-100">Settings</span>
+            <span className="font-bold text-xs tracking-tight text-neutral-100">{t.settingsTitle}</span>
             <span className="text-[10px] text-neutral-500 font-mono bg-[#161924] border border-[#272d3d] px-1.5 py-0.5 rounded">
               ESC
             </span>
@@ -341,7 +342,7 @@ export default function SettingsModal({
           {/* Left Navigation Sidebar */}
           <aside className="w-52 border-r border-[#202430] bg-[#090b10] p-2 space-y-1 shrink-0">
             <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 py-1">
-              Preferences
+              {t.tabPreferences}
             </div>
             <button
               onClick={() => setActiveTab("general")}
@@ -352,7 +353,7 @@ export default function SettingsModal({
               }`}
             >
               <Globe className="w-3.5 h-3.5 text-indigo-400" />
-              <span>General & Language</span>
+              <span>{t.tabGeneral}</span>
             </button>
 
             <button
@@ -364,11 +365,11 @@ export default function SettingsModal({
               }`}
             >
               <User className="w-3.5 h-3.5 text-neutral-400" />
-              <span>Account & Security</span>
+              <span>{t.tabAccount}</span>
             </button>
 
             <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 pt-3 pb-1">
-              Data & Integrations
+              {t.tabDataGroup}
             </div>
             <button
               onClick={() => setActiveTab("data")}
@@ -379,7 +380,7 @@ export default function SettingsModal({
               }`}
             >
               <Database className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Vault & Export</span>
+              <span>{t.tabVault}</span>
             </button>
 
             <button
@@ -391,7 +392,7 @@ export default function SettingsModal({
               }`}
             >
               <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-              <span>MCP & Protocols</span>
+              <span>{t.tabMcp}</span>
             </button>
           </aside>
 
@@ -511,10 +512,10 @@ export default function SettingsModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                        Language Preferences
+                        {t.langPrefTitle}
                       </div>
                       <div className="text-xs text-neutral-400 mt-0.5">
-                        Choose your preferred interface language across Nota.
+                        {t.langPrefDesc}
                       </div>
                     </div>
 
@@ -546,7 +547,7 @@ export default function SettingsModal({
                 {/* System & Build Information */}
                 <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-2 text-xs">
                   <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    System Architecture
+                    {t.sysArchTitle}
                   </div>
                   <div className="flex items-center gap-4 text-neutral-400 font-mono text-[11px]">
                     <span>App: Nota Web</span>
@@ -563,17 +564,17 @@ export default function SettingsModal({
                 {/* Profile Information */}
                 <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
                   <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    Profile Information
+                    {t.profileInfoTitle}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Name</span>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">{t.nameLabel}</span>
                       <span className="text-neutral-200 font-medium">
                         {user.name || "Default User"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Email</span>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">{t.emailLabel}</span>
                       <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
                     </div>
                   </div>
@@ -584,10 +585,10 @@ export default function SettingsModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-rose-400">
-                        Delete Your Account
+                        {t.deleteAccountSectionTitle}
                       </div>
                       <div className="text-xs text-neutral-400 mt-0.5">
-                        Permanently delete your account, notes, and folders. This action cannot be undone.
+                        {t.deleteAccountSectionDesc}
                       </div>
                     </div>
                     {!showDeleteConfirm && (
@@ -595,7 +596,7 @@ export default function SettingsModal({
                         onClick={() => setShowDeleteConfirm(true)}
                         className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-mono font-medium transition-all shrink-0"
                       >
-                        Delete Account
+                        {t.deleteAccountBtn}
                       </button>
                     )}
                   </div>
@@ -604,7 +605,7 @@ export default function SettingsModal({
                   {showDeleteConfirm && (
                     <div className="pt-3 border-t border-[#1e2330] space-y-2.5">
                       <div className="text-xs text-neutral-300">
-                        Type <code className="font-mono text-rose-300 bg-rose-950/40 px-1 py-0.5 rounded border border-rose-900/40">{user.email}</code> to confirm deletion:
+                        {t.typeToConfirm} <code className="font-mono text-rose-300 bg-rose-950/40 px-1 py-0.5 rounded border border-rose-900/40">{user.email}</code> {t.toConfirmDeletion}
                       </div>
                       <div className="flex items-center gap-2">
                         <input
@@ -620,7 +621,7 @@ export default function SettingsModal({
                           className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-medium transition-all disabled:opacity-30 disabled:hover:bg-rose-600 flex items-center gap-1.5 shrink-0"
                         >
                           {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          {isDeletingAccount ? "Deleting..." : "Confirm Delete"}
+                          {isDeletingAccount ? t.saving : t.confirmDeleteBtn}
                         </button>
                         <button
                           onClick={() => {
@@ -630,7 +631,7 @@ export default function SettingsModal({
                           }}
                           className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] text-neutral-400 text-xs font-mono transition-all shrink-0"
                         >
-                          Cancel
+                          {t.cancelActionBtn}
                         </button>
                       </div>
                       {deleteError && (
@@ -650,10 +651,10 @@ export default function SettingsModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                        Export Full Vault
+                        {t.exportFullVaultTitle}
                       </div>
                       <div className="text-xs text-neutral-400 mt-0.5">
-                        Download an offline archive of all your notes and folder structure as a compressed .zip file.
+                        {t.exportFullVaultDesc}
                       </div>
                     </div>
                     {!isExporting ? (
@@ -663,14 +664,14 @@ export default function SettingsModal({
                         className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] border border-[#262c3d] text-neutral-200 text-xs font-mono font-medium flex items-center gap-1.5 transition-all disabled:opacity-40 shrink-0"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        Export Vault (.zip)
+                        {t.exportVaultBtn}
                       </button>
                     ) : (
                       <button
                         onClick={handleCancelExport}
                         className="px-3 py-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300 text-xs font-mono transition-all shrink-0"
                       >
-                        Cancel
+                        {t.cancelActionBtn}
                       </button>
                     )}
                   </div>
@@ -719,15 +720,15 @@ export default function SettingsModal({
                 {/* Vault Overview Stats */}
                 <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
                   <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    Vault Storage Overview
+                    {t.vaultStorageTitle}
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="p-3 bg-[#090b10] border border-[#202430] rounded-lg">
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Total Documents</span>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">{t.totalDocsLabel}</span>
                       <span className="text-neutral-200 font-mono text-base font-bold">{notes.length}</span>
                     </div>
                     <div className="p-3 bg-[#090b10] border border-[#202430] rounded-lg">
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Total Folders</span>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">{t.totalFoldersLabel}</span>
                       <span className="text-neutral-200 font-mono text-base font-bold">{folders.length}</span>
                     </div>
                   </div>
