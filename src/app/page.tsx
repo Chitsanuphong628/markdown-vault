@@ -256,6 +256,50 @@ export default function AppHome() {
     }
   };
 
+  // Handle Rename Note
+  const handleRenameNote = async (id: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    // Optimistic update
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, title: newTitle.trim() } : n))
+    );
+    if (activeNote && activeNote.id === id) {
+      setActiveNote((prev: any) => ({ ...prev, title: newTitle.trim() }));
+      setEditTitle(newTitle.trim());
+    }
+    try {
+      await fetch(`/api/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+      loadNotes();
+    } catch (err) {
+      console.error("Failed to rename note:", err);
+      loadNotes();
+    }
+  };
+
+  // Handle Rename Folder
+  const handleRenameFolder = async (id: string, newName: string) => {
+    if (!newName.trim()) return;
+    // Optimistic update
+    setFolders((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, name: newName.trim() } : f))
+    );
+    try {
+      await fetch(`/api/folders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      loadFolders();
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+      loadFolders();
+    }
+  };
+
   // Handle Move Note
   const handleMoveNote = async (noteId: string, targetFolderId: string | null) => {
     // Optimistic UI update
@@ -332,6 +376,8 @@ export default function AppHome() {
         onDeleteFolder={handleDeleteFolder}
         onCreateNote={handleCreateNote}
         onDeleteNote={handleDeleteNote}
+        onRenameNote={handleRenameNote}
+        onRenameFolder={handleRenameFolder}
         onMoveNote={handleMoveNote}
         onMoveFolder={handleMoveFolder}
         onOpenSettings={() => setIsSettingsOpen(true)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import {
   Folder as FolderIcon,
@@ -16,6 +16,8 @@ import {
   BookOpen,
   Sparkles,
   Settings,
+  Check,
+  X,
 } from "lucide-react";
 
 import { Language, I18N_MAIN } from "@/lib/i18n";
@@ -48,6 +50,8 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => Promise<void>;
   onCreateNote: (folderId?: string | null) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
+  onRenameNote?: (id: string, newTitle: string) => Promise<void>;
+  onRenameFolder?: (id: string, newName: string) => Promise<void>;
   onMoveNote?: (noteId: string, targetFolderId: string | null) => Promise<void>;
   onMoveFolder?: (folderId: string, targetParentId: string | null) => Promise<void>;
   onOpenSettings?: () => void;
@@ -71,6 +75,8 @@ export default function Sidebar({
   onDeleteFolder,
   onCreateNote,
   onDeleteNote,
+  onRenameNote,
+  onRenameFolder,
   onMoveNote,
   onMoveFolder,
   onOpenSettings,
@@ -82,6 +88,47 @@ export default function Sidebar({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+
+  // Inline rename state for note & folder
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingType, setRenamingType] = useState<"note" | "folder" | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (renamingId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingId]);
+
+  const handleStartRename = (id: string, type: "note" | "folder", currentName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRenamingId(id);
+    setRenamingType(type);
+    setRenameValue(currentName);
+  };
+
+  const handleFinishRename = async () => {
+    if (!renamingId || !renamingType) return;
+    const trimmed = renameValue.trim();
+    if (trimmed) {
+      if (renamingType === "note" && onRenameNote) {
+        await onRenameNote(renamingId, trimmed);
+      } else if (renamingType === "folder" && onRenameFolder) {
+        await onRenameFolder(renamingId, trimmed);
+      }
+    }
+    setRenamingId(null);
+    setRenamingType(null);
+    setRenameValue("");
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setRenamingType(null);
+    setRenameValue("");
+  };
 
   const toggleFolder = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -346,7 +393,34 @@ export default function Sidebar({
                       isDragOver ? "text-indigo-400 scale-110" : "text-amber-400"
                     }`}
                   />
-                  <span className="truncate">{folder.name}</span>
+                  {/* Folder Title or Inline Edit Input */}
+                  {renamingId === folder.id && renamingType === "folder" ? (
+                    <div
+                      className="flex-1 flex items-center gap-1 min-w-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleFinishRename();
+                          if (e.key === "Escape") handleCancelRename();
+                        }}
+                        onBlur={handleFinishRename}
+                        className="w-full bg-neutral-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-neutral-100 outline-none font-medium"
+                      />
+                    </div>
+                  ) : (
+                    <span
+                      title="Double-click to rename"
+                      onDoubleClick={(e) => handleStartRename(folder.id, "folder", folder.name, e)}
+                      className="truncate flex-1 select-none"
+                    >
+                      {folder.name}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <span className="text-[10px] text-neutral-500 mr-1">{folderNotes.length}</span>
@@ -380,7 +454,7 @@ export default function Sidebar({
                     folderNotes.map((note) => (
                       <div
                         key={note.id}
-                        draggable
+                        draggable={renamingId !== note.id}
                         onDragStart={(e) => handleDragStartNote(e, note.id)}
                         onClick={() => onSelectNote(note.id)}
                         className={`group flex items-center justify-between px-2 py-1 rounded-md cursor-grab active:cursor-grabbing transition-colors ${
@@ -389,9 +463,35 @@ export default function Sidebar({
                             : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
                         }`}
                       >
-                        <div className="flex items-center gap-1.5 truncate">
+                        <div className="flex items-center gap-1.5 truncate flex-1 min-w-0 mr-2">
                           <FileText className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{note.title}</span>
+                          {renamingId === note.id && renamingType === "note" ? (
+                            <div
+                              className="flex-1 flex items-center min-w-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                ref={renameInputRef}
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleFinishRename();
+                                  if (e.key === "Escape") handleCancelRename();
+                                }}
+                                onBlur={handleFinishRename}
+                                className="w-full bg-neutral-900 border border-indigo-400 rounded px-1.5 py-0.5 text-xs text-neutral-100 outline-none"
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              title="Double-click to rename"
+                              onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)}
+                              className="truncate flex-1 select-none"
+                            >
+                              {note.title}
+                            </span>
+                          )}
                         </div>
                         <button
                           onClick={(e) => {
@@ -400,7 +500,7 @@ export default function Sidebar({
                               onDeleteNote(note.id);
                             }
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-300 transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-300 transition-opacity shrink-0"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -428,7 +528,7 @@ export default function Sidebar({
             {rootNotes.map((note) => (
               <div
                 key={note.id}
-                draggable
+                draggable={renamingId !== note.id}
                 onDragStart={(e) => handleDragStartNote(e, note.id)}
                 onClick={() => onSelectNote(note.id)}
                 className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors ${
@@ -437,9 +537,35 @@ export default function Sidebar({
                     : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex items-center gap-2 truncate flex-1 min-w-0 mr-2">
                   <FileText className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{note.title}</span>
+                  {renamingId === note.id && renamingType === "note" ? (
+                    <div
+                      className="flex-1 flex items-center min-w-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleFinishRename();
+                          if (e.key === "Escape") handleCancelRename();
+                        }}
+                        onBlur={handleFinishRename}
+                        className="w-full bg-neutral-900 border border-indigo-400 rounded px-1.5 py-0.5 text-xs text-neutral-100 outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <span
+                      title="Double-click to rename"
+                      onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)}
+                      className="truncate flex-1 select-none"
+                    >
+                      {note.title}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={(e) => {
@@ -448,7 +574,7 @@ export default function Sidebar({
                       onDeleteNote(note.id);
                     }
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity shrink-0"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
