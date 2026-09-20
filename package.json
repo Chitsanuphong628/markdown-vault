@@ -1,13 +1,12 @@
 {
-  "name": "note.md",
+  "name": "note-vault",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "postinstall": "prisma skills sync || exit 0"
+    "lint": "next lint"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
