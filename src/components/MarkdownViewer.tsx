@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -207,13 +207,32 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
                 const lineNumber = node?.position?.start?.line;
 
                 if (isTaskItem && lineNumber) {
+                  // Find checkbox inside children and clone it with proper lineNumber
+                  const modifiedChildren = React.Children.map(children, (child: any) => {
+                    if (React.isValidElement(child) && (child.type === "input" || (child.props as any)?.type === "checkbox")) {
+                      const childProps = child.props as any;
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={Boolean(childProps.checked)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleExactLine(lineNumber);
+                          }}
+                          className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto shrink-0"
+                        />
+                      );
+                    }
+                    return child;
+                  });
+
                   return (
                     <li
-                      className={`${className || ""} list-none -ml-5 flex items-center gap-1.5 py-0.5 cursor-pointer select-none`}
-                      data-line={lineNumber}
+                      className={`${className || ""} list-none -ml-5 flex items-center gap-1.5 py-1 cursor-pointer select-none`}
+                      onClick={() => handleToggleExactLine(lineNumber)}
                       {...props}
                     >
-                      {children}
+                      {modifiedChildren}
                     </li>
                   );
                 }
@@ -223,28 +242,6 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
                     {children}
                   </li>
                 );
-              },
-              input: ({ node, type, checked, disabled, ...props }: any) => {
-                if (type === "checkbox") {
-                  const lineNumber = node?.position?.start?.line;
-
-                  return (
-                    <input
-                      type="checkbox"
-                      checked={Boolean(checked)}
-                      disabled={false}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        if (lineNumber) {
-                          handleToggleExactLine(lineNumber);
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto shrink-0"
-                      {...props}
-                    />
-                  );
-                }
-                return <input type={type} {...props} />;
               },
             }}
           >
