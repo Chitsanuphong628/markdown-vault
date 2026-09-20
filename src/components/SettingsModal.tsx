@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Cpu,
@@ -94,6 +94,18 @@ export default function SettingsModal({ isOpen, onClose, user }: SettingsModalPr
   const [activeTab, setActiveTab] = useState<"mcp" | "account">("mcp");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const claudeConfig = JSON.stringify(
@@ -132,8 +144,14 @@ export default function SettingsModal({ isOpen, onClose, user }: SettingsModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-3xl bg-[#0e1015] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[640px] max-h-[90vh]">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200 cursor-pointer"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-3xl bg-[#0e1015] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[640px] max-h-[90vh] cursor-default"
+      >
         {/* Modal Top Header */}
         <div className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/60 shrink-0">
           <div className="flex items-center gap-2.5">
