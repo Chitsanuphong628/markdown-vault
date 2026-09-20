@@ -171,10 +171,12 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
   };
 
   return (
-    <div className="flex-1 flex overflow-y-auto">
-      <div className="flex-1 max-w-4xl mx-auto px-8 py-9 min-w-0">
-        {/* Document Header */}
-        <div className="mb-8 pb-6 border-b border-neutral-800/80">
+    <div className="flex-1 flex overflow-hidden min-h-0">
+      {/* Main Reading & Article Scroll Area */}
+      <div className="flex-1 overflow-y-auto min-w-0">
+        <div className="max-w-4xl mx-auto px-8 py-9">
+          {/* Document Header */}
+          <div className="mb-8 pb-6 border-b border-neutral-800/80">
           <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400 mb-3">
             {note.folder && (
               <span className="flex items-center gap-1.5 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium border border-neutral-700/50">
@@ -277,6 +279,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
             {content}
           </ReactMarkdown>
         </article>
+        </div>
       </div>
 
       {/* Dynamic Table of Contents */}

@@ -43,9 +43,9 @@ export default function TableOfContents({ headings, lang = "en" }: TableOfConten
   if (headings.length === 0) return null;
 
   return (
-    <div className="w-64 shrink-0 hidden xl:block pl-6 pr-2 py-6 border-l border-neutral-800/60 bg-neutral-950/20">
-      <div className="sticky top-6 text-sm">
-        <div className="flex items-center gap-2 font-semibold text-neutral-400 mb-3.5 text-[11px] uppercase tracking-wider">
+    <aside className="w-64 shrink-0 hidden xl:flex flex-col pl-6 pr-3 py-6 border-l border-neutral-800/60 bg-neutral-950/20 overflow-y-auto">
+      <div className="text-sm">
+        <div className="flex items-center gap-2 font-semibold text-neutral-400 mb-3.5 text-[11px] uppercase tracking-wider sticky top-0 bg-neutral-950/20 backdrop-blur-xs py-1">
           <ListCollapse className="w-3.5 h-3.5 text-indigo-400" />
           <span>{lang === "th" ? "สารบัญหัวข้อ (TOC)" : "Table of Contents"}</span>
         </div>
@@ -81,6 +81,6 @@ export default function TableOfContents({ headings, lang = "en" }: TableOfConten
           })}
         </nav>
       </div>
-    </div>
+    </aside>
   );
 }
