@@ -275,7 +275,10 @@ export default function SettingsModal({
       mcpServers: {
         "nota-vault": {
           command: "node",
-          args: ["/path/to/nota/mcp-server/index.js"],
+          args: ["./mcp-server/index.js"],
+          env: {
+            NOTA_USER_ID: user.id,
+          },
         },
       },
     },
@@ -289,7 +292,10 @@ export default function SettingsModal({
         servers: {
           "nota-vault": {
             command: "node",
-            args: ["/path/to/nota/mcp-server/index.js"],
+            args: ["./mcp-server/index.js"],
+            env: {
+              NOTA_USER_ID: user.id,
+            },
           },
         },
       },
@@ -466,6 +472,9 @@ export default function SettingsModal({
 
                   <div className="bg-[#090b10] border border-[#202430] rounded-xl p-3.5 font-mono text-[11px] text-neutral-300 overflow-x-auto leading-relaxed shadow-inner">
                     {activeConfigTab === "claude" ? claudeConfig : cursorConfig}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 font-mono flex items-center justify-between">
+                    <span>* Replace <code className="text-neutral-400">./mcp-server/index.js</code> with your absolute workspace path if running outside the project root.</span>
                   </div>
                 </div>
 

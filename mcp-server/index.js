@@ -150,8 +150,9 @@ const TOOLS = [
   },
 ];
 
-// Helper to get default user
-async function getDefaultUserId(customUserId) {
+// Helper to get active user ID (checks env NOTA_USER_ID first, then custom arg, then fallback)
+async function getTargetUserId(customUserId) {
+  if (process.env.NOTA_USER_ID) return process.env.NOTA_USER_ID;
   if (customUserId) return customUserId;
   const { data } = await supabase.from("User").select("id").limit(1).single();
   return data ? data.id : null;
@@ -165,6 +166,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Call Tool Handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  const targetUserId = await getTargetUserId();
 
   try {
     switch (name) {
@@ -174,6 +176,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .select("id, title, folderId, isShared, createdAt, updatedAt, folder:Folder(name), user:User(email)")
           .order("updatedAt", { ascending: false });
 
+        if (targetUserId) query = query.eq("userId", targetUserId);
         if (args.folderId) query = query.eq("folderId", args.folderId);
         if (args.searchQuery) {
           query = query.or(`title.ilike.%${args.searchQuery}%,content.ilike.%${args.searchQuery}%`);
@@ -189,12 +192,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_note": {
-        const { data, error } = await supabase
+        let query = supabase
           .from("Note")
           .select("*, folder:Folder(name), user:User(email)")
-          .eq("id", args.id)
-          .single();
+          .eq("id", args.id);
 
+        if (targetUserId) query = query.eq("userId", targetUserId);
+
+        const { data, error } = await query.single();
         if (error) throw error;
         return {
           content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -202,7 +207,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "create_note": {
-        const userId = await getDefaultUserId(args.userId);
+        const userId = await getTargetUserId(args.userId);
         if (!userId) throw new Error("No user found in database to assign note to.");
 
         const { data, error } = await supabase
@@ -230,13 +235,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.content !== undefined) updateData.content = args.content;
         if (args.folderId !== undefined) updateData.folderId = args.folderId;
 
-        const { data, error } = await supabase
+        let updateQuery = supabase
           .from("Note")
           .update(updateData)
-          .eq("id", args.id)
-          .select()
-          .single();
+          .eq("id", args.id);
 
+        if (targetUserId) updateQuery = updateQuery.eq("userId", targetUserId);
+
+        const { data, error } = await updateQuery.select().single();
         if (error) throw error;
         return {
           content: [{ type: "text", text: `อัปเดตโน้ตสำเร็จ: ${data.id} (${data.title})` }],
@@ -244,7 +250,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "delete_note": {
-        const { error } = await supabase.from("Note").delete().eq("id", args.id);
+        let deleteQuery = supabase.from("Note").delete().eq("id", args.id);
+        if (targetUserId) deleteQuery = deleteQuery.eq("userId", targetUserId);
+
+        const { error } = await deleteQuery;
         if (error) throw error;
         return {
           content: [{ type: "text", text: `ลบโน้ต ID: ${args.id} สำเร็จเรียบร้อย` }],
@@ -252,11 +261,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_folders": {
-        const { data, error } = await supabase
+        let folderQuery = supabase
           .from("Folder")
           .select("*, notes:Note(id, title)")
           .order("name", { ascending: true });
 
+        if (targetUserId) folderQuery = folderQuery.eq("userId", targetUserId);
+
+        const { data, error } = await folderQuery;
         if (error) throw error;
         return {
           content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -264,7 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "create_folder": {
-        const userId = await getDefaultUserId(args.userId);
+        const userId = await getTargetUserId(args.userId);
         if (!userId) throw new Error("No user found in database to assign folder to.");
 
         const { data, error } = await supabase
@@ -286,7 +298,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "delete_folder": {
-        const { error } = await supabase.from("Folder").delete().eq("id", args.id);
+        let deleteFolderQuery = supabase.from("Folder").delete().eq("id", args.id);
+        if (targetUserId) deleteFolderQuery = deleteFolderQuery.eq("userId", targetUserId);
+
+        const { error } = await deleteFolderQuery;
         if (error) throw error;
         return {
           content: [{ type: "text", text: `ลบโฟลเดอร์ ID: ${args.id} สำเร็จเรียบร้อย` }],
