@@ -7,15 +7,6 @@ import {
   User,
   Copy,
   Check,
-  Terminal,
-  FileText,
-  Zap,
-  FolderTree,
-  Share2,
-  Trash2,
-  Sliders,
-  Sparkles,
-  ExternalLink,
   Download,
   AlertTriangle,
   Loader2,
@@ -373,7 +364,7 @@ export default function SettingsModal({
                 {/* Status Bar */}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-[#11141d] border border-[#202430]">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-xs shadow-emerald-400" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span className="text-xs font-semibold text-neutral-200">
                       MCP Server: <span className="text-emerald-400">Online</span>
                     </span>
@@ -535,8 +526,8 @@ export default function SettingsModal({
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
                               exportProgress.isWaiting
-                                ? "bg-amber-400 animate-ping"
-                                : "bg-cyan-400 animate-pulse"
+                                ? "bg-amber-400"
+                                : "bg-cyan-400"
                             }`}
                           />
                           {exportProgress.statusText || "Processing queue..."}
