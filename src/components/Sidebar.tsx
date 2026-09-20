@@ -16,7 +16,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import LanguageToggle from "./LanguageToggle";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 
 export interface FolderItem {
@@ -174,7 +173,6 @@ export default function Sidebar({
         </div>
 
         <div className="flex items-center gap-1">
-          <LanguageToggle lang={lang} setLang={setLang} />
           <button
             onClick={onLogout}
             title={t.logoutTitle}
