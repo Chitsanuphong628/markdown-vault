@@ -246,45 +246,42 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Action Buttons: Import / New Note / New Folder */}
-      <div className="p-3 border-b border-neutral-800/70 space-y-2">
-        <button
-          onClick={onOpenUpload}
-          className="w-full py-2 px-3 bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-400 hover:text-indigo-300 border border-indigo-500/25 hover:border-indigo-500/40 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-indigo-500/10"
-        >
-          <UploadCloud className="w-4 h-4" />
-          <span>{t.importMd}</span>
-        </button>
-
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => onCreateNote(selectedFolderId)}
-            className="flex-1 py-1.5 px-2 bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/40 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
-          >
-            <FilePlus className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{t.newNote}</span>
-          </button>
-          <button
-            onClick={() => setIsCreatingFolder(true)}
-            className="flex-1 py-1.5 px-2 bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/40 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
-          >
-            <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-            <span>{t.newFolder}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="px-3 pt-2.5">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder={t.searchPlaceholder}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-          />
+      {/* Compact Action Bar & Search (Linear / VS Code style) */}
+      <div className="px-3 pt-2.5 pb-1 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2" />
+            <input
+              type="text"
+              placeholder={t.searchPlaceholder}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/20 transition-all"
+            />
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0 bg-neutral-950/40 p-0.5 rounded-lg border border-neutral-800/80">
+            <button
+              onClick={() => onCreateNote(selectedFolderId)}
+              title={t.newNote}
+              className="p-1.5 text-neutral-400 hover:text-indigo-300 hover:bg-neutral-800/70 rounded-md transition-colors cursor-pointer"
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setIsCreatingFolder(true)}
+              title={t.newFolder}
+              className="p-1.5 text-neutral-400 hover:text-amber-300 hover:bg-neutral-800/70 rounded-md transition-colors cursor-pointer"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onOpenUpload}
+              title={t.importMd}
+              className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/70 rounded-md transition-colors cursor-pointer"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -457,10 +454,10 @@ export default function Sidebar({
                         draggable={renamingId !== note.id}
                         onDragStart={(e) => handleDragStartNote(e, note.id)}
                         onClick={() => onSelectNote(note.id)}
-                        className={`group flex items-center justify-between px-2 py-1 rounded-md cursor-grab active:cursor-grabbing transition-colors ${
+                        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-all ${
                           activeNoteId === note.id
-                            ? "bg-indigo-600 text-white font-medium shadow-sm"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
+                            ? "bg-neutral-800/90 text-neutral-100 font-medium border border-neutral-700/60 shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
                         }`}
                       >
                         <div className="flex items-center gap-1.5 truncate flex-1 min-w-0 mr-2">
@@ -531,10 +528,10 @@ export default function Sidebar({
                 draggable={renamingId !== note.id}
                 onDragStart={(e) => handleDragStartNote(e, note.id)}
                 onClick={() => onSelectNote(note.id)}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors ${
+                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-all ${
                   activeNoteId === note.id
-                    ? "bg-indigo-600 text-white font-medium shadow-sm"
-                    : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
+                    ? "bg-neutral-800/90 text-neutral-100 font-medium border border-neutral-700/60 shadow-sm"
+                    : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
                 }`}
               >
                 <div className="flex items-center gap-2 truncate flex-1 min-w-0 mr-2">
