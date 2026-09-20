@@ -9,9 +9,11 @@ import {
   Check,
   Download,
   Loader2,
+  Globe,
 } from "lucide-react";
 import Image from "next/image";
 import JSZip from "jszip";
+import { Language } from "@/lib/i18n";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,6 +22,8 @@ interface SettingsModalProps {
   notes?: Array<{ id: string; title: string; folderId: string | null }>;
   folders?: Array<{ id: string; name: string }>;
   onAccountDeleted?: () => void;
+  lang?: Language;
+  setLang?: (lang: Language) => void;
 }
 
 interface ToolItem {
@@ -48,6 +52,8 @@ export default function SettingsModal({
   notes = [],
   folders = [],
   onAccountDeleted,
+  lang = "en",
+  setLang,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<"mcp" | "account">("mcp");
   const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
@@ -482,6 +488,43 @@ export default function SettingsModal({
                     <div>
                       <span className="text-neutral-500 block text-[11px] mb-0.5">Email</span>
                       <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Language Preferences */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                        Language Preferences
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        Choose your preferred interface language across Nota.
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-[#090b10] border border-[#202430] p-1 rounded-lg shrink-0">
+                      <button
+                        onClick={() => setLang && setLang("en")}
+                        className={`px-3 py-1 text-xs font-mono rounded-md transition-all cursor-pointer ${
+                          lang === "en"
+                            ? "bg-[#1f2433] text-indigo-300 font-semibold border border-[#323a52]"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        English
+                      </button>
+                      <button
+                        onClick={() => setLang && setLang("th")}
+                        className={`px-3 py-1 text-xs font-mono rounded-md transition-all cursor-pointer ${
+                          lang === "th"
+                            ? "bg-[#1f2433] text-indigo-300 font-semibold border border-[#323a52]"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        ไทย
+                      </button>
                     </div>
                   </div>
                 </div>

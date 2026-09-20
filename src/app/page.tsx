@@ -655,6 +655,8 @@ export default function AppHome() {
         user={user}
         notes={notes}
         folders={folders}
+        lang={lang}
+        setLang={setLang}
         onAccountDeleted={() => {
           setIsSettingsOpen(false);
           router.push("/login");
