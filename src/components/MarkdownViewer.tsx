@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -105,14 +105,10 @@ function CodeBlock({ className, children, ...props }: any) {
 
 export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewerProps) {
   const [content, setContent] = useState(note.content);
-  const checkboxIndexRef = useRef(0);
 
   useEffect(() => {
     setContent(note.content);
   }, [note.content]);
-
-  // Reset checkbox index before each render pass
-  checkboxIndexRef.current = 0;
 
   // Extract headings for Table of Contents
   const headings = useMemo(() => {
@@ -139,26 +135,22 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
     return headingList;
   }, [content]);
 
-  // Handle Interactive Task List (Checkbox Toggle)
-  const handleToggleCheckbox = (targetIndex: number) => {
-    let currentTaskIndex = 0;
+  // Handle Precise Checkbox Toggle by Exact Line Number in AST
+  const handleToggleExactLine = (lineNumber: number) => {
     const lines = content.split("\n");
+    const targetIdx = lineNumber - 1;
 
-    const newLines = lines.map((line) => {
-      const taskMatch = line.match(/^(\s*[-*+]\s+\[)([ xX])(\]\s+.*)$/);
-      if (taskMatch) {
-        if (currentTaskIndex === targetIndex) {
-          const isChecked = taskMatch[2].toLowerCase() === "x";
-          const newStatus = isChecked ? " " : "x";
-          currentTaskIndex++;
-          return `${taskMatch[1]}${newStatus}${taskMatch[3]}`;
+    if (targetIdx >= 0 && targetIdx < lines.length) {
+      lines[targetIdx] = lines[targetIdx].replace(
+        /^(\s*[-*+]\s+\[)([ xX])(\]\s+.*)$/,
+        (match, prefix, check, suffix) => {
+          const newCheck = check.toLowerCase() === "x" ? " " : "x";
+          return `${prefix}${newCheck}${suffix}`;
         }
-        currentTaskIndex++;
-      }
-      return line;
-    });
+      );
+    }
 
-    const updated = newLines.join("\n");
+    const updated = lines.join("\n");
     setContent(updated);
 
     if (onUpdateContent) {
@@ -210,37 +202,49 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
             rehypePlugins={[rehypeSlug]}
             components={{
               code: CodeBlock,
-              input: ({ type, checked, disabled, ...props }: any) => {
+              li: ({ node, children, className, ...props }: any) => {
+                const isTaskItem = className?.includes("task-list-item");
+                const lineNumber = node?.position?.start?.line;
+
+                if (isTaskItem && lineNumber) {
+                  return (
+                    <li
+                      className={`${className || ""} list-none -ml-5 flex items-center gap-1.5 py-0.5 cursor-pointer select-none`}
+                      data-line={lineNumber}
+                      {...props}
+                    >
+                      {children}
+                    </li>
+                  );
+                }
+
+                return (
+                  <li className={className} {...props}>
+                    {children}
+                  </li>
+                );
+              },
+              input: ({ node, type, checked, disabled, ...props }: any) => {
                 if (type === "checkbox") {
-                  const thisIndex = checkboxIndexRef.current++;
+                  const lineNumber = node?.position?.start?.line;
+
                   return (
                     <input
                       type="checkbox"
                       checked={Boolean(checked)}
-                      disabled={false} // Explicitly remove remark-gfm disabled flag!
+                      disabled={false}
                       onChange={(e) => {
                         e.stopPropagation();
-                        handleToggleCheckbox(thisIndex);
+                        if (lineNumber) {
+                          handleToggleExactLine(lineNumber);
+                        }
                       }}
-                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto"
+                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto shrink-0"
                       {...props}
                     />
                   );
                 }
                 return <input type={type} {...props} />;
-              },
-              li: ({ children, className, ...props }: any) => {
-                const isTaskItem = className?.includes("task-list-item");
-                return (
-                  <li
-                    className={`${className || ""} ${
-                      isTaskItem ? "list-none -ml-5 flex items-center gap-1.5 py-0.5" : ""
-                    }`}
-                    {...props}
-                  >
-                    {children}
-                  </li>
-                );
               },
             }}
           >
