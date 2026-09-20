@@ -562,7 +562,7 @@ export default function SettingsModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-rose-400">
-                        Danger Zone
+                        Delete Your Account
                       </div>
                       <div className="text-xs text-neutral-400 mt-0.5">
                         Permanently delete your account, notes, and folders. This action cannot be undone.
