@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { BookOpen, Share2, ArrowLeft, Lock, Loader2 } from "lucide-react";
 
@@ -73,11 +74,17 @@ export default function ShareNotePage({ params }: SharePageProps) {
       {/* Top Navbar */}
       <header className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/60 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-sm">
-            <BookOpen className="w-3.5 h-3.5" />
+          <div className="w-7 h-7 rounded-lg bg-neutral-950/80 border border-neutral-800 flex items-center justify-center p-1 shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="Nota Logo"
+              width={20}
+              height={20}
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
-            <span className="text-xs font-semibold text-neutral-200">Markdown Vault</span>
+            <span className="text-xs font-bold text-neutral-200">Nota</span>
             <span className="text-[10px] text-neutral-500 ml-2">Shared Public Document</span>
           </div>
         </div>

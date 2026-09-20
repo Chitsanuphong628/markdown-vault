@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Markdown Vault - สวยงาม อ่านง่าย จัดการสะดวก",
-  description: "เว็บจัดเก็บและอ่านโน้ต Markdown พร้อม Table of Contents และระบบโฟลเดอร์",
+  title: "Nota - Next-Gen Markdown & Knowledge Hub",
+  description: "Next-generation Markdown reading, visualization, and knowledge management platform.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

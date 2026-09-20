@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Folder as FolderIcon,
   FolderPlus,
@@ -156,13 +157,19 @@ export default function Sidebar({
       {/* App Branding & User Profile */}
       <div className="p-3.5 border-b border-neutral-800/80 flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
-            <BookOpen className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-lg bg-neutral-950/80 border border-neutral-800 flex items-center justify-center shadow-md shadow-indigo-500/10 shrink-0 p-1.5">
+            <Image
+              src="/logo.png"
+              alt="Nota Logo"
+              width={24}
+              height={24}
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="min-w-0">
-            <h2 className="font-semibold text-xs tracking-tight text-neutral-100 flex items-center gap-1.5">
+            <h2 className="font-bold text-sm tracking-tight text-neutral-100 flex items-center gap-1.5">
               <span>{t.appName}</span>
-              <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-mono px-1 py-0.2 rounded border border-indigo-500/20">
+              <span className="text-[9px] bg-indigo-500/15 text-indigo-400 font-mono px-1 py-0.2 rounded border border-indigo-500/25">
                 PRO
               </span>
             </h2>

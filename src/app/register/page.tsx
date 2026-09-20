@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   BookOpen,
   KeyRound,
@@ -160,13 +161,19 @@ export default function RegisterPage() {
 
         {/* Top Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 via-pink-500 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
-            <BookOpen className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-neutral-950/90 border border-neutral-800 flex items-center justify-center p-2 shadow-lg shadow-indigo-500/10">
+            <Image
+              src="/logo.png"
+              alt="Nota Logo"
+              width={28}
+              height={28}
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="flex flex-col">
-            <span className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              Markdown Vault
-              <span className="text-[10px] font-semibold uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full">
+            <span className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              Nota
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 px-2 py-0.5 rounded-full">
                 v2.0
               </span>
             </span>
@@ -181,42 +188,43 @@ export default function RegisterPage() {
             <span>{t.heroTag}</span>
           </div>
 
-          <h1 className="text-4xl xl:text-5xl font-extrabold tracking-tight text-white leading-tight mb-4">
+          <h1 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight mb-4">
             {t.heroTitle}
           </h1>
 
-          <p className="text-neutral-400 text-sm xl:text-base leading-relaxed mb-8">
+          <p className="text-neutral-400 text-sm sm:text-base leading-relaxed mb-8">
             {t.heroDesc}
           </p>
 
-          <div className="grid grid-cols-1 gap-3.5">
-            <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5 shadow-sm">
-              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
-                <FolderTree className="w-5 h-5" />
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5">
+                <FolderTree className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-neutral-200">{t.feature1Title}</h4>
-                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.feature1Desc}</p>
+                <h3 className="text-sm font-semibold text-neutral-200">{t.feature1Title}</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">{t.feature1Desc}</p>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5 shadow-sm">
-              <div className="p-2.5 rounded-xl bg-pink-500/10 text-pink-400 border border-pink-500/20 shrink-0">
-                <FileCheck2 className="w-5 h-5" />
+            <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0 mt-0.5">
+                <FileCheck2 className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-neutral-200">{t.feature2Title}</h4>
-                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.feature2Desc}</p>
+                <h3 className="text-sm font-semibold text-neutral-200">{t.feature2Title}</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">{t.feature2Desc}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Bottom Quote */}
-        <div className="relative z-10 pt-6 border-t border-neutral-800/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-neutral-300 italic font-medium">{t.quote}</p>
-            <p className="text-[11px] text-neutral-500 mt-1">{t.author}</p>
+        {/* Testimonial / Social Proof */}
+        <div className="relative z-10 pt-6 border-t border-neutral-800/60">
+          <p className="text-xs italic text-neutral-400">{t.quote}</p>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[11px] text-neutral-500">{t.author}</span>
           </div>
         </div>
       </div>
@@ -226,10 +234,16 @@ export default function RegisterPage() {
         {/* Top Language Switcher */}
         <div className="flex items-center justify-between w-full max-w-md mx-auto">
           <div className="flex lg:hidden items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white">
-              <BookOpen className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-950 border border-neutral-800 flex items-center justify-center p-1.5 shadow-sm">
+              <Image
+                src="/logo.png"
+                alt="Nota Logo"
+                width={20}
+                height={20}
+                className="w-full h-full object-contain"
+              />
             </div>
-            <span className="text-sm font-bold">Markdown Vault</span>
+            <span className="text-sm font-bold text-white">Nota</span>
           </div>
 
           <div className="ml-auto">
@@ -375,7 +389,7 @@ export default function RegisterPage() {
 
         {/* Global Footer Legal */}
         <div className="w-full max-w-md mx-auto pt-6 text-center text-[11px] text-neutral-600">
-          Markdown Vault &copy; 2026. Secure & Private Knowledge Management.
+          Nota &copy; 2026. Secure & Private Knowledge Management.
         </div>
       </div>
     </div>

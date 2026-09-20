@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   BookOpen,
   KeyRound,
@@ -32,7 +33,7 @@ const I18N = {
     quote: "“The fastest way to turn raw developer thoughts into polished, readable knowledge.”",
     author: "Engineered for high-performing teams",
     signInTitle: "Welcome back",
-    signInSub: "Sign in to access your Markdown Vault",
+    signInSub: "Sign in to access your Nota workspace",
     emailLabel: "Email address",
     emailPlaceholder: "name@company.com",
     passwordLabel: "Password",
@@ -57,7 +58,7 @@ const I18N = {
     quote: "“วิธีที่เร็วที่สุดในการเปลี่ยนบันทึกข้อความดิบให้เป็นคลังความรู้ที่อ่านง่ายและสวยงาม”",
     author: "ออกแบบมาเพื่อทีมและนักพัฒนายุดใหม่",
     signInTitle: "ยินดีต้อนรับกลับมา",
-    signInSub: "ลงชื่อเข้าใช้เพื่อเปิดคลังโน้ต Markdown ของคุณ",
+    signInSub: "ลงชื่อเข้าใช้เพื่อเปิดคลังโน้ต Nota ของคุณ",
     emailLabel: "อีเมล",
     emailPlaceholder: "name@company.com",
     passwordLabel: "รหัสผ่าน",
@@ -124,13 +125,19 @@ export default function LoginPage() {
 
         {/* Top Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
-            <BookOpen className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-neutral-950/90 border border-neutral-800 flex items-center justify-center p-2 shadow-lg shadow-indigo-500/10">
+            <Image
+              src="/logo.png"
+              alt="Nota Logo"
+              width={28}
+              height={28}
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="flex flex-col">
-            <span className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              Markdown Vault
-              <span className="text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
+            <span className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              Nota
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 px-2 py-0.5 rounded-full">
                 v2.0
               </span>
             </span>
@@ -192,10 +199,16 @@ export default function LoginPage() {
         <div className="flex items-center justify-between w-full max-w-md mx-auto">
           {/* Mobile-only logo */}
           <div className="flex lg:hidden items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-              <BookOpen className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-950 border border-neutral-800 flex items-center justify-center p-1.5 shadow-sm">
+              <Image
+                src="/logo.png"
+                alt="Nota Logo"
+                width={20}
+                height={20}
+                className="w-full h-full object-contain"
+              />
             </div>
-            <span className="text-sm font-bold">Markdown Vault</span>
+            <span className="text-sm font-bold text-white">Nota</span>
           </div>
 
           <div className="ml-auto">
@@ -212,63 +225,71 @@ export default function LoginPage() {
             <p className="text-neutral-400 text-sm">{t.signInSub}</p>
           </div>
 
-          {/* Error / Alert Display */}
+          {requiresVerification && (
+            <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-amber-400 text-xs font-semibold">
+                <span>⚠️ {t.unverifiedNotice}</span>
+              </div>
+              <Link
+                href={`/verify-email?email=${encodeURIComponent(email)}`}
+                className="text-xs text-amber-300 hover:text-amber-200 underline font-medium"
+              >
+                {t.verifyLinkText}
+              </Link>
+            </div>
+          )}
+
           {error && (
-            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-400 text-xs leading-relaxed animate-in fade-in duration-200">
-              <div className="font-semibold">{error}</div>
-              {requiresVerification && (
-                <div className="mt-2.5 pt-2.5 border-t border-rose-500/20">
-                  <Link
-                    href={`/verify-email?email=${encodeURIComponent(email)}`}
-                    className="text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1"
-                  >
-                    <span>{t.verifyLinkText}</span>
-                  </Link>
-                </div>
-              )}
+            <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center gap-3 text-rose-400 text-xs">
+              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-300 mb-2">
+              <label className="block text-xs font-medium text-neutral-300 mb-1.5">
                 {t.emailLabel}
               </label>
-              <div className="relative group">
-                <Mail className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3.5 transition-colors group-focus-within:text-indigo-400" />
+              <div className="relative">
+                <Mail className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
-                  className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl pl-10 pr-4 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
+                  className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all"
                 />
               </div>
             </div>
 
             {/* Password Field with Show/Hide */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-semibold text-neutral-300">
-                  {t.passwordLabel}
-                </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-neutral-300">{t.passwordLabel}</label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  {t.forgotPass}
+                </Link>
               </div>
-              <div className="relative group">
-                <KeyRound className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3.5 transition-colors group-focus-within:text-indigo-400" />
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3" />
                 <input
                   type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}
-                  className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl pl-10 pr-11 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
+                  className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-3.5 text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer"
+                  className="absolute right-3 top-2.5 text-neutral-500 hover:text-neutral-300 p-0.5 cursor-pointer"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -280,7 +301,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 disabled:opacity-50 cursor-pointer"
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
               {loading ? (
                 <>
@@ -297,20 +318,20 @@ export default function LoginPage() {
           </form>
 
           {/* Footer Navigation Link */}
-          <div className="mt-8 text-center text-xs text-neutral-400">
+          <p className="mt-8 text-center text-xs text-neutral-400">
             {t.noAccount}{" "}
             <Link
               href="/register"
-              className="text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-4"
+              className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4"
             >
               {t.signUpLink}
             </Link>
-          </div>
+          </p>
         </div>
 
         {/* Global Footer Legal */}
-        <div className="w-full max-w-md mx-auto pt-6 text-center text-[11px] text-neutral-600">
-          Markdown Vault &copy; 2026. Secure & Private Knowledge Management.
+        <div className="w-full max-w-md mx-auto text-center text-[11px] text-neutral-600">
+          Nota &copy; 2026. Secure & Private Knowledge Management.
         </div>
       </div>
     </div>

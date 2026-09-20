@@ -2,7 +2,7 @@ export type Language = "en" | "th";
 
 export const I18N_MAIN = {
   en: {
-    appName: "Markdown Vault",
+    appName: "Nota",
     allNotes: "All Notes",
     notesCount: (c: number) => `All Notes (${c})`,
     importMd: "Import / Drop .md",
@@ -74,7 +74,7 @@ export const I18N_MAIN = {
     importing: "Importing...",
   },
   th: {
-    appName: "Markdown Vault",
+    appName: "Nota",
     allNotes: "โน้ตทั้งหมด",
     notesCount: (c: number) => `โน้ตทั้งหมด (${c})`,
     importMd: "โยน / นำเข้าไฟล์ .md",
