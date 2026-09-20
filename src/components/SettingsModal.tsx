@@ -10,6 +10,9 @@ import {
   Download,
   Loader2,
   Globe,
+  Database,
+  Sliders,
+  ShieldAlert,
 } from "lucide-react";
 import Image from "next/image";
 import JSZip from "jszip";
@@ -55,7 +58,7 @@ export default function SettingsModal({
   lang = "en",
   setLang,
 }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<"mcp" | "account">("mcp");
+  const [activeTab, setActiveTab] = useState<"general" | "account" | "data" | "mcp">("general");
   const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
 
@@ -336,10 +339,52 @@ export default function SettingsModal({
         {/* HUD Body */}
         <div className="flex-1 flex min-h-0">
           {/* Left Navigation Sidebar */}
-          <aside className="w-48 border-r border-[#202430] bg-[#090b10] p-2 space-y-1 shrink-0">
+          <aside className="w-52 border-r border-[#202430] bg-[#090b10] p-2 space-y-1 shrink-0">
+            <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 py-1">
+              Preferences
+            </div>
+            <button
+              onClick={() => setActiveTab("general")}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                activeTab === "general"
+                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              <span>General & Language</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("account")}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                activeTab === "account"
+                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+              }`}
+            >
+              <User className="w-3.5 h-3.5 text-neutral-400" />
+              <span>Account & Security</span>
+            </button>
+
+            <div className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 px-2.5 pt-3 pb-1">
+              Data & Integrations
+            </div>
+            <button
+              onClick={() => setActiveTab("data")}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                activeTab === "data"
+                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Vault & Export</span>
+            </button>
+
             <button
               onClick={() => setActiveTab("mcp")}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 activeTab === "mcp"
                   ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
@@ -347,18 +392,6 @@ export default function SettingsModal({
             >
               <Cpu className="w-3.5 h-3.5 text-indigo-400" />
               <span>MCP & Protocols</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("account")}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                activeTab === "account"
-                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
-              }`}
-            >
-              <User className="w-3.5 h-3.5 text-neutral-400" />
-              <span>Account & System</span>
             </button>
           </aside>
 
@@ -470,28 +503,9 @@ export default function SettingsModal({
                   </div>
                 </div>
               </>
-            ) : (
-              /* Account & System Tab */
+            ) : activeTab === "general" ? (
+              /* General & Preferences Tab */
               <div className="space-y-4">
-                {/* Profile Information (No UUID) */}
-                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
-                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    Profile Information
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Name</span>
-                      <span className="text-neutral-200 font-medium">
-                        {user.name || "Default User"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">Email</span>
-                      <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Language Preferences */}
                 <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -529,75 +543,40 @@ export default function SettingsModal({
                   </div>
                 </div>
 
-                {/* Data Management: Export Vault with Resilient Queue */}
-                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                        Data Management
-                      </div>
-                      <div className="text-xs text-neutral-400 mt-0.5">
-                        Download an offline archive of all your notes and folders as a .zip file.
-                      </div>
-                    </div>
-                    {!isExporting ? (
-                      <button
-                        onClick={handleExportVault}
-                        disabled={notes.length === 0}
-                        className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] border border-[#262c3d] text-neutral-200 text-xs font-mono font-medium flex items-center gap-1.5 transition-all disabled:opacity-40 shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Export Vault (.zip)
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleCancelExport}
-                        className="px-3 py-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300 text-xs font-mono transition-all shrink-0"
-                      >
-                        Cancel
-                      </button>
-                    )}
+                {/* System & Build Information */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-2 text-xs">
+                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                    System Architecture
                   </div>
-
-                  {/* HUD Queue Progress */}
-                  {isExporting && (
-                    <div className="pt-2 border-t border-[#1e2330] space-y-2">
-                      <div className="flex items-center justify-between text-[11px] font-mono">
-                        <span className="flex items-center gap-1.5 text-neutral-300">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              exportProgress.isWaiting
-                                ? "bg-amber-400"
-                                : "bg-cyan-400"
-                            }`}
-                          />
-                          {exportProgress.statusText || "Processing queue..."}
-                        </span>
-                        <span className="text-neutral-400">
-                          {exportProgress.completed} / {exportProgress.total} (
-                          {exportProgress.total > 0
-                            ? Math.round((exportProgress.completed / exportProgress.total) * 100)
-                            : 0}
-                          %)
-                        </span>
-                      </div>
-                      {/* Progress bar */}
-                      <div className="w-full bg-[#0d1017] rounded-full h-1.5 overflow-hidden border border-[#202430]">
-                        <div
-                          className={`h-full transition-all duration-300 ${
-                            exportProgress.isWaiting ? "bg-amber-400" : "bg-cyan-500"
-                          }`}
-                          style={{
-                            width: `${
-                              exportProgress.total > 0
-                                ? (exportProgress.completed / exportProgress.total) * 100
-                                : 0
-                            }%`,
-                          }}
-                        />
-                      </div>
+                  <div className="flex items-center gap-4 text-neutral-400 font-mono text-[11px]">
+                    <span>App: Nota Web</span>
+                    <span>•</span>
+                    <span>Stack: Next.js 16 + Turbopack</span>
+                    <span>•</span>
+                    <span>Storage: Supabase PostgreSQL</span>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === "account" ? (
+              /* Account & Security Tab */
+              <div className="space-y-4">
+                {/* Profile Information */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                    Profile Information
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">Name</span>
+                      <span className="text-neutral-200 font-medium">
+                        {user.name || "Default User"}
+                      </span>
                     </div>
-                  )}
+                    <div>
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">Email</span>
+                      <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Danger Zone: Account Deletion */}
@@ -661,6 +640,97 @@ export default function SettingsModal({
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            ) : (
+              /* Data & Vault Tab */
+              <div className="space-y-4">
+                {/* Data Management: Export Vault with Resilient Queue */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                        Export Full Vault
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        Download an offline archive of all your notes and folder structure as a compressed .zip file.
+                      </div>
+                    </div>
+                    {!isExporting ? (
+                      <button
+                        onClick={handleExportVault}
+                        disabled={notes.length === 0}
+                        className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] border border-[#262c3d] text-neutral-200 text-xs font-mono font-medium flex items-center gap-1.5 transition-all disabled:opacity-40 shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export Vault (.zip)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleCancelExport}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300 text-xs font-mono transition-all shrink-0"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+
+                  {/* HUD Queue Progress */}
+                  {isExporting && (
+                    <div className="pt-2 border-t border-[#1e2330] space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-mono">
+                        <span className="flex items-center gap-1.5 text-neutral-300">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              exportProgress.isWaiting
+                                ? "bg-amber-400"
+                                : "bg-cyan-400"
+                            }`}
+                          />
+                          {exportProgress.statusText || "Processing queue..."}
+                        </span>
+                        <span className="text-neutral-400">
+                          {exportProgress.completed} / {exportProgress.total} (
+                          {exportProgress.total > 0
+                            ? Math.round((exportProgress.completed / exportProgress.total) * 100)
+                            : 0}
+                          %)
+                        </span>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="w-full bg-[#0d1017] rounded-full h-1.5 overflow-hidden border border-[#202430]">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            exportProgress.isWaiting ? "bg-amber-400" : "bg-cyan-500"
+                          }`}
+                          style={{
+                            width: `${
+                              exportProgress.total > 0
+                                ? (exportProgress.completed / exportProgress.total) * 100
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Vault Overview Stats */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                    Vault Storage Overview
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-[#090b10] border border-[#202430] rounded-lg">
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">Total Documents</span>
+                      <span className="text-neutral-200 font-mono text-base font-bold">{notes.length}</span>
+                    </div>
+                    <div className="p-3 bg-[#090b10] border border-[#202430] rounded-lg">
+                      <span className="text-neutral-500 block text-[11px] mb-0.5">Total Folders</span>
+                      <span className="text-neutral-200 font-mono text-base font-bold">{folders.length}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
