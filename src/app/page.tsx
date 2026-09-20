@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -9,13 +9,12 @@ import {
   FileText,
   UploadCloud,
   Edit3,
-  Eye,
   Save,
   Trash2,
-  Folder as FolderIcon,
-  Search,
-  BookOpen,
-  Sparkles,
+  Share2,
+  Check,
+  Globe,
+  Lock,
 } from "lucide-react";
 
 export default function AppHome() {
@@ -37,6 +36,11 @@ export default function AppHome() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Share state
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isShared, setIsShared] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
 
   // Upload Modal
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -105,9 +109,37 @@ export default function AppHome() {
           setActiveNote(data.note);
           setEditTitle(data.note.title);
           setEditContent(data.note.content);
+          setIsShared(Boolean(data.note.isShared));
         }
       });
   }, [activeNoteId]);
+
+  // Handle Toggle Share
+  const handleToggleShare = async (newSharedStatus: boolean) => {
+    if (!activeNoteId) return;
+    try {
+      const res = await fetch(`/api/notes/${activeNoteId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isShared: newSharedStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsShared(newSharedStatus);
+        setActiveNote((prev: any) => ({ ...prev, isShared: newSharedStatus }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (typeof window === "undefined" || !activeNoteId) return;
+    const shareUrl = `${window.location.origin}/share/${activeNoteId}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 2000);
+  };
 
   // Handle Create Note
   const handleCreateNote = async (folderId?: string | null) => {
@@ -250,6 +282,11 @@ export default function AppHome() {
                 <span className="font-semibold text-sm text-neutral-200 truncate">
                   {isEditing ? editTitle : activeNote.title}
                 </span>
+                {isShared && (
+                  <span className="hidden sm:flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    <Globe className="w-3 h-3" /> เปิดแชร์สาธารณะ
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -272,9 +309,22 @@ export default function AppHome() {
                   </>
                 ) : (
                   <>
+                    {/* Share Button */}
+                    <button
+                      onClick={() => setIsShareModalOpen(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        isShared
+                          ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/30"
+                          : "bg-neutral-800 hover:bg-neutral-700/80 text-neutral-300"
+                      }`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>แชร์โน้ต</span>
+                    </button>
+
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700/80 text-neutral-300 rounded-lg text-xs font-medium transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700/80 text-neutral-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>แก้ไข</span>
@@ -285,7 +335,7 @@ export default function AppHome() {
                           handleDeleteNote(activeNote.id);
                         }
                       }}
-                      className="p-2 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                      className="p-2 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
                       title="ลบโน้ตนี้"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -327,7 +377,7 @@ export default function AppHome() {
             )}
           </>
         ) : (
-          /* Empty State: Prompt to Drop or Select Note */
+          /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-20 h-20 rounded-3xl bg-neutral-900/80 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-6 shadow-xl shadow-indigo-500/5">
               <UploadCloud className="w-10 h-10 animate-bounce" />
@@ -337,7 +387,7 @@ export default function AppHome() {
             </h2>
             <p className="text-neutral-400 text-sm max-w-md mb-6 leading-relaxed">
               ลากไฟล์ .md จากคอมพิวเตอร์ของคุณมาวาง หรือกดปุ่มด้านล่างเพื่อนำเข้าเอกสาร
-              ระบบจะจัดหน้าให้อ่านง่าย สวยงาม พร้อมสารบัญหัวข้อและจัดโครงสร้างอัตโนมัติ
+              ระบบจะจัดหน้าให้อ่านง่าย สบายตา พร้อมสารบัญหัวข้อและจัดโครงสร้างอัตโนมัติ
             </p>
             <div className="flex items-center gap-3">
               <button
@@ -358,6 +408,97 @@ export default function AppHome() {
           </div>
         )}
       </main>
+
+      {/* Share Modal */}
+      {isShareModalOpen && activeNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-semibold text-neutral-100">แชร์โน้ตนี้</h3>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-400 mb-6">
+              เปิดให้ทุกคนที่มีลิงก์สามารถอ่านโน้ตนี้ได้ แม้ไม่ได้เป็นสมาชิกในระบบ
+            </p>
+
+            <div className="p-4 bg-neutral-950/60 border border-neutral-800 rounded-xl space-y-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isShared ? (
+                    <Globe className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-neutral-500" />
+                  )}
+                  <span className="text-sm font-medium text-neutral-200">
+                    {isShared ? "เปิดการแชร์สาธารณะแล้ว" : "โน้ตส่วนตัว (ปิดการแชร์)"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleToggleShare(!isShared)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    isShared
+                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500"
+                  }`}
+                >
+                  {isShared ? "ปิดการแชร์" : "เปิดแชร์ทันที"}
+                </button>
+              </div>
+
+              {isShared && (
+                <div>
+                  <label className="block text-[11px] text-neutral-400 mb-1.5">
+                    ลิงก์สำหรับเปิดอ่านโน้ตนี้:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/share/${activeNote.id}`
+                          : ""
+                      }
+                      className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-300 font-mono select-all focus:outline-none"
+                    />
+                    <button
+                      onClick={handleCopyLink}
+                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {copiedShareLink ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">คัดลอกแล้ว</span>
+                        </>
+                      ) : (
+                        <span>คัดลอก</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dropzone / Upload Modal */}
       <DropzoneModal
