@@ -15,10 +15,15 @@ import {
   Check,
   Globe,
   Lock,
+  Sparkles,
+  Search,
 } from "lucide-react";
+import { Language, I18N_MAIN } from "@/lib/i18n";
 
 export default function AppHome() {
   const router = useRouter();
+  const [lang, setLang] = useState<Language>("en");
+  const t = I18N_MAIN[lang];
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -64,6 +69,19 @@ export default function AppHome() {
         setLoading(false);
       });
   }, [router]);
+
+  // Global Keyboard shortcuts (Cmd/Ctrl + K for search, Escape to exit edit)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[type="text"][placeholder*="Search"], input[type="text"][placeholder*="ค้นหา"]') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Load folders
   const loadFolders = async () => {
@@ -279,14 +297,14 @@ export default function AppHome() {
       <div className="h-screen w-screen bg-neutral-950 flex items-center justify-center text-neutral-400">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm">กำลังโหลดคลังโน้ต...</p>
+          <p className="text-xs font-medium text-neutral-400">{t.loadingVault}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans">
+    <div className="h-screen w-screen bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
       {/* Sidebar Tree Navigation */}
       <Sidebar
         user={user}
@@ -294,6 +312,8 @@ export default function AppHome() {
         notes={notes}
         activeNoteId={activeNoteId}
         selectedFolderId={selectedFolderId}
+        lang={lang}
+        setLang={setLang}
         onSelectNote={(id) => {
           setActiveNoteId(id);
           setIsEditing(false);
@@ -316,35 +336,38 @@ export default function AppHome() {
         {activeNote ? (
           <>
             {/* Top Toolbar */}
-            <div className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/60 backdrop-blur-md">
-              <div className="flex items-center gap-3 truncate">
-                <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+            <div className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/40 backdrop-blur-md z-10">
+              <div className="flex items-center gap-3 truncate min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
                 <span className="font-semibold text-sm text-neutral-200 truncate">
                   {isEditing ? editTitle : activeNote.title}
                 </span>
                 {isShared && (
-                  <span className="hidden sm:flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    <Globe className="w-3 h-3" /> เปิดแชร์สาธารณะ
+                  <span className="hidden sm:flex items-center gap-1.5 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-medium">
+                    <Globe className="w-3 h-3" />
+                    <span>{t.publicSharedBadge}</span>
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {isEditing ? (
                   <>
                     <button
                       onClick={() => setIsEditing(false)}
-                      className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                      className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
                     >
-                      ยกเลิก
+                      {t.cancelEdit}
                     </button>
                     <button
                       onClick={handleSaveNote}
                       disabled={isSaving}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all shadow-sm hover:shadow-indigo-500/20 cursor-pointer"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>{isSaving ? "กำลังบันทึก..." : "บันทึกโน้ต"}</span>
+                      <span>{isSaving ? t.saving : t.saveNote}</span>
                     </button>
                   </>
                 ) : (
@@ -352,31 +375,31 @@ export default function AppHome() {
                     {/* Share Button */}
                     <button
                       onClick={() => setIsShareModalOpen(true)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                         isShared
-                          ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/30"
-                          : "bg-neutral-800 hover:bg-neutral-700/80 text-neutral-300"
+                          ? "bg-emerald-600/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/25"
+                          : "bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50"
                       }`}
                     >
                       <Share2 className="w-3.5 h-3.5" />
-                      <span>แชร์โน้ต</span>
+                      <span>{t.shareNote}</span>
                     </button>
 
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700/80 text-neutral-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>แก้ไข</span>
+                      <span>{t.editNote}</span>
                     </button>
                     <button
                       onClick={() => {
-                        if (confirm(`ลบโน้ต "${activeNote.title}" หรือไม่?`)) {
+                        if (confirm(t.deleteNoteConfirm(activeNote.title))) {
                           handleDeleteNote(activeNote.id);
                         }
                       }}
-                      className="p-2 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
-                      title="ลบโน้ตนี้"
+                      className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
+                      title={t.deleteNote}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -387,34 +410,35 @@ export default function AppHome() {
 
             {/* Note Body: Markdown Viewer OR Editor */}
             {isEditing ? (
-              <div className="flex-1 flex flex-col p-6 space-y-4 overflow-y-auto">
+              <div className="flex-1 flex flex-col p-8 space-y-5 overflow-y-auto max-w-5xl mx-auto w-full">
                 <div>
-                  <label className="block text-xs font-medium text-neutral-400 mb-1">
-                    ชื่อโน้ต
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
+                    {t.noteTitleLabel}
                   </label>
                   <input
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-lg font-bold text-neutral-100 focus:outline-none focus:border-indigo-500"
-                    placeholder="ใส่หัวข้อโน้ต..."
+                    className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl px-4 py-2.5 text-lg font-bold text-neutral-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+                    placeholder={t.noteTitlePlaceholder}
                   />
                 </div>
                 <div className="flex-1 flex flex-col">
-                  <label className="block text-xs font-medium text-neutral-400 mb-1">
-                    เนื้อหา Markdown
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
+                    {t.markdownContentLabel}
                   </label>
                   <textarea
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
-                    className="w-full flex-1 min-h-[450px] bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-sm font-mono text-neutral-200 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y"
-                    placeholder="เขียน Markdown ที่นี่..."
+                    className="w-full flex-1 min-h-[500px] bg-neutral-900/90 border border-neutral-800 rounded-xl p-5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 leading-relaxed resize-y shadow-inner"
+                    placeholder={t.markdownContentPlaceholder}
                   />
                 </div>
               </div>
             ) : (
               <MarkdownViewer
                 note={activeNote}
+                lang={lang}
                 onUpdateContent={async (newContent) => {
                   if (!activeNoteId) return;
                   setActiveNote((prev: any) => ({ ...prev, content: newContent }));
@@ -430,31 +454,33 @@ export default function AppHome() {
           </>
         ) : (
           /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-neutral-900/80 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-6 shadow-xl shadow-indigo-500/5">
-              <UploadCloud className="w-10 h-10 animate-bounce" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center relative">
+            {/* Subtle background glow */}
+            <div className="absolute w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -top-20" />
+            
+            <div className="w-20 h-20 rounded-3xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-6 shadow-2xl shadow-indigo-500/10 ring-1 ring-neutral-800">
+              <UploadCloud className="w-9 h-9 animate-pulse" />
             </div>
-            <h2 className="text-2xl font-bold text-neutral-100 mb-2">
-              โยนไฟล์ Markdown (.md) เพื่อเริ่มอ่านได้ทันที
+            <h2 className="text-2xl sm:text-3xl font-bold text-neutral-100 mb-3 tracking-tight">
+              {t.emptyHeroTitle}
             </h2>
-            <p className="text-neutral-400 text-sm max-w-md mb-6 leading-relaxed">
-              ลากไฟล์ .md จากคอมพิวเตอร์ของคุณมาวาง หรือกดปุ่มด้านล่างเพื่อนำเข้าเอกสาร
-              ระบบจะจัดหน้าให้อ่านง่าย สบายตา พร้อมสารบัญหัวข้อและจัดโครงสร้างอัตโนมัติ
+            <p className="text-neutral-400 text-sm max-w-lg mb-8 leading-relaxed">
+              {t.emptyHeroDesc}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={() => setIsUploadOpen(true)}
-                className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-2 cursor-pointer"
+                className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
               >
                 <UploadCloud className="w-4 h-4" />
-                <span>โยน / นำเข้าไฟล์ .md ตอนนี้</span>
+                <span>{t.dropNowBtn}</span>
               </button>
               <button
                 onClick={() => handleCreateNote(selectedFolderId)}
-                className="py-2.5 px-5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl text-sm font-medium transition-all flex items-center gap-2 cursor-pointer"
+                className="py-2.5 px-5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/50 rounded-xl text-sm font-medium transition-all flex items-center gap-2 cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
-                <span>สร้างโน้ตใหม่เปล่าๆ</span>
+                <span>{t.createEmptyBtn}</span>
               </button>
             </div>
           </div>
@@ -463,26 +489,28 @@ export default function AppHome() {
 
       {/* Share Modal */}
       {isShareModalOpen && activeNote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
           <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-semibold text-neutral-100">แชร์โน้ตนี้</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <h3 className="font-semibold text-neutral-100">{t.shareModalTitle}</h3>
               </div>
               <button
                 onClick={() => setIsShareModalOpen(false)}
-                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200"
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-neutral-400 mb-6">
-              เปิดให้ทุกคนที่มีลิงก์สามารถอ่านโน้ตนี้ได้ แม้ไม่ได้เป็นสมาชิกในระบบ
+            <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
+              {t.shareModalDesc}
             </p>
 
-            <div className="p-4 bg-neutral-950/60 border border-neutral-800 rounded-xl space-y-4 mb-6">
+            <div className="p-4 bg-neutral-950/70 border border-neutral-800 rounded-xl space-y-4 mb-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {isShared ? (
@@ -491,25 +519,25 @@ export default function AppHome() {
                     <Lock className="w-4 h-4 text-neutral-500" />
                   )}
                   <span className="text-sm font-medium text-neutral-200">
-                    {isShared ? "เปิดการแชร์สาธารณะแล้ว" : "โน้ตส่วนตัว (ปิดการแชร์)"}
+                    {isShared ? t.isPublicOn : t.isPublicOff}
                   </span>
                 </div>
                 <button
                   onClick={() => handleToggleShare(!isShared)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     isShared
                       ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30"
-                      : "bg-indigo-600 text-white hover:bg-indigo-500"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm shadow-indigo-600/20"
                   }`}
                 >
-                  {isShared ? "ปิดการแชร์" : "เปิดแชร์ทันที"}
+                  {isShared ? t.disableShareBtn : t.enableShareBtn}
                 </button>
               </div>
 
               {isShared && (
                 <div>
                   <label className="block text-[11px] text-neutral-400 mb-1.5">
-                    ลิงก์สำหรับเปิดอ่านโน้ตนี้:
+                    {t.shareLinkLabel}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -524,15 +552,15 @@ export default function AppHome() {
                     />
                     <button
                       onClick={handleCopyLink}
-                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700/50 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       {copiedShareLink ? (
                         <>
                           <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">คัดลอกแล้ว</span>
+                          <span className="text-emerald-400">{t.copiedBtn}</span>
                         </>
                       ) : (
-                        <span>คัดลอก</span>
+                        <span>{t.copyBtn}</span>
                       )}
                     </button>
                   </div>
@@ -543,9 +571,9 @@ export default function AppHome() {
             <div className="flex justify-end">
               <button
                 onClick={() => setIsShareModalOpen(false)}
-                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+                className="px-4 py-2 bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-medium transition-colors cursor-pointer"
               >
-                ปิดหน้าต่าง
+                {t.closeBtn}
               </button>
             </div>
           </div>
@@ -558,6 +586,7 @@ export default function AppHome() {
         onClose={() => setIsUploadOpen(false)}
         folders={folders}
         currentFolderId={selectedFolderId}
+        lang={lang}
         onSuccess={() => {
           loadFolders();
           loadNotes();

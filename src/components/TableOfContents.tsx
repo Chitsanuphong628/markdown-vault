@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ListCollapse } from "lucide-react";
+import { Language } from "@/lib/i18n";
 
 export interface HeadingItem {
   id: string;
@@ -11,9 +12,10 @@ export interface HeadingItem {
 
 interface TableOfContentsProps {
   headings: HeadingItem[];
+  lang?: Language;
 }
 
-export default function TableOfContents({ headings }: TableOfContentsProps) {
+export default function TableOfContents({ headings, lang = "en" }: TableOfContentsProps) {
   const [activeId, setActiveId] = useState<string>("");
 
   useEffect(() => {
@@ -41,11 +43,11 @@ export default function TableOfContents({ headings }: TableOfContentsProps) {
   if (headings.length === 0) return null;
 
   return (
-    <div className="w-64 shrink-0 hidden xl:block pl-6 pr-2 py-4">
-      <div className="sticky top-20 text-sm">
-        <div className="flex items-center gap-2 font-semibold text-neutral-400 mb-3 text-xs uppercase tracking-wider">
-          <ListCollapse className="w-4 h-4" />
-          <span>สารบัญหัวข้อ (TOC)</span>
+    <div className="w-64 shrink-0 hidden xl:block pl-6 pr-2 py-6 border-l border-neutral-800/60 bg-neutral-950/20">
+      <div className="sticky top-6 text-sm">
+        <div className="flex items-center gap-2 font-semibold text-neutral-400 mb-3.5 text-[11px] uppercase tracking-wider">
+          <ListCollapse className="w-3.5 h-3.5 text-indigo-400" />
+          <span>{lang === "th" ? "สารบัญหัวข้อ (TOC)" : "Table of Contents"}</span>
         </div>
         <nav className="space-y-1.5 border-l border-neutral-800">
           {headings.map((heading) => {

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { UploadCloud, X, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Language, I18N_MAIN } from "@/lib/i18n";
 
 interface DropzoneModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface DropzoneModalProps {
   folders: { id: string; name: string }[];
   currentFolderId: string | null;
   onSuccess: () => void;
+  lang?: Language;
 }
 
 export default function DropzoneModal({
@@ -17,7 +19,9 @@ export default function DropzoneModal({
   folders,
   currentFolderId,
   onSuccess,
+  lang = "en",
 }: DropzoneModalProps) {
+  const t = I18N_MAIN[lang];
   const [selectedFolder, setSelectedFolder] = useState<string>(currentFolderId || "");
   const [isDragging, setIsDragging] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
@@ -99,7 +103,7 @@ export default function DropzoneModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
           <div className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-indigo-400" />
-            <h3 className="font-semibold text-neutral-100">นำเข้าโน้ต (.md)</h3>
+            <h3 className="font-semibold text-neutral-100">{t.importModalTitle}</h3>
           </div>
           <button
             onClick={onClose}
@@ -114,14 +118,14 @@ export default function DropzoneModal({
           {/* Target Folder Selector */}
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              จัดเก็บไว้ในโฟลเดอร์:
+              {t.targetFolderLabel}
             </label>
             <select
               value={selectedFolder}
               onChange={(e) => setSelectedFolder(e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
             >
-              <option value="">(ราก - ไม่มีโฟลเดอร์)</option>
+              <option value="">{t.rootFolderOption}</option>
               {folders.map((f) => (
                 <option key={f.id} value={f.id}>
                   📁 {f.name}
@@ -153,17 +157,17 @@ export default function DropzoneModal({
             <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
               <UploadCloud className="w-7 h-7" />
             </div>
-            <p className="text-sm font-medium text-neutral-200 mb-1">
-              ลากไฟล์ .md มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์
+            <p className="text-sm font-medium text-neutral-200 mb-1 text-center">
+              {t.dragDropBoxTitle}
             </p>
-            <p className="text-xs text-neutral-500">รองรับไฟล์ Markdown หลายไฟล์พร้อมกัน</p>
+            <p className="text-xs text-neutral-500 text-center">{t.dragDropBoxSub}</p>
           </div>
 
           {/* File List */}
           {filesToUpload.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-neutral-400">
-                ไฟล์ที่เลือก ({filesToUpload.length} ไฟล์):
+                {t.selectedFilesTitle}
               </div>
               <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
                 {filesToUpload.map((file, idx) => (
@@ -206,24 +210,24 @@ export default function DropzoneModal({
           <button
             onClick={onClose}
             disabled={uploading}
-            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
+            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
           >
-            ยกเลิก
+            {t.cancelBtn}
           </button>
           <button
             onClick={handleStartUpload}
             disabled={filesToUpload.length === 0 || uploading}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20"
           >
             {uploading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                กำลังนำเข้า...
+                {t.importing}
               </>
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4" />
-                นำเข้า {filesToUpload.length > 0 ? `(${filesToUpload.length})` : ""}
+                {t.importAllBtn(filesToUpload.length)}
               </>
             )}
           </button>

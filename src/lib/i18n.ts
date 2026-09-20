@@ -1,0 +1,148 @@
+export type Language = "en" | "th";
+
+export const I18N_MAIN = {
+  en: {
+    appName: "Markdown Vault",
+    allNotes: "All Notes",
+    notesCount: (c: number) => `All Notes (${c})`,
+    importMd: "Import / Drop .md",
+    newNote: "New Note",
+    newFolder: "New Folder",
+    searchPlaceholder: "Search notes or content (⌘K)...",
+    rootFilesHeader: "Unorganized Notes",
+    canDragHint: "Drag to folder",
+    emptyFolder: "Empty folder (drop notes here)",
+    emptyFolderHover: "Drop note here to store",
+    dropToUnfile: "Drop to unfile",
+    newFolderTitle: "New folder name:",
+    newFolderPlaceholder: "e.g. Documentation, Projects",
+    createBtn: "Create",
+    cancelBtn: "Cancel",
+    logoutTitle: "Sign out",
+    logoutConfirm: "Are you sure you want to sign out?",
+    deleteFolderConfirm: (name: string) => `Delete folder "${name}"?`,
+    deleteNoteConfirm: (title: string) => `Delete note "${title}"?`,
+    loadingVault: "Loading your vault...",
+    
+    // Main area
+    publicSharedBadge: "Public Link Active",
+    cancelEdit: "Cancel",
+    saveNote: "Save Changes",
+    saving: "Saving...",
+    shareNote: "Share",
+    editNote: "Edit",
+    deleteNote: "Delete",
+    noteTitleLabel: "Document Title",
+    noteTitlePlaceholder: "Enter document title...",
+    markdownContentLabel: "Markdown Source",
+    markdownContentPlaceholder: "Write markdown here...",
+    
+    // Empty State Hero
+    emptyHeroTitle: "Instant Markdown & Knowledge Hub",
+    emptyHeroDesc:
+      "Drop any .md file directly onto your screen or click below to start reading with syntax highlighting, live Mermaid charts, interactive task lists, and instant outline.",
+    dropNowBtn: "Drop / Import .md file",
+    createEmptyBtn: "Create Blank Note",
+    
+    // Stats Bar
+    wordsLabel: "words",
+    charsLabel: "chars",
+    readTimeLabel: "min read",
+    lastUpdatedLabel: "Updated",
+    createdLabel: "Created",
+    
+    // Share modal
+    shareModalTitle: "Share Note Publicly",
+    shareModalDesc: "Anyone with the public link will be able to read this document in view-only mode.",
+    isPublicOn: "Public Access Enabled",
+    isPublicOff: "Private Note (Access Restricted)",
+    disableShareBtn: "Disable Link",
+    enableShareBtn: "Enable Public Link",
+    shareLinkLabel: "Shareable Web URL:",
+    copiedBtn: "Copied!",
+    copyBtn: "Copy Link",
+    closeBtn: "Done",
+
+    // Import modal
+    importModalTitle: "Import Markdown Files (.md)",
+    targetFolderLabel: "Destination Folder:",
+    rootFolderOption: "(Root - No folder)",
+    dragDropBoxTitle: "Click to browse or drag & drop files here",
+    dragDropBoxSub: "Supports .md, .markdown files. Batch uploads supported.",
+    selectedFilesTitle: "Files ready to import:",
+    importAllBtn: (c: number) => `Import ${c} document${c > 1 ? "s" : ""}`,
+    importing: "Importing...",
+  },
+  th: {
+    appName: "Markdown Vault",
+    allNotes: "โน้ตทั้งหมด",
+    notesCount: (c: number) => `โน้ตทั้งหมด (${c})`,
+    importMd: "โยน / นำเข้าไฟล์ .md",
+    newNote: "สร้างโน้ต",
+    newFolder: "สร้างโฟลเดอร์",
+    searchPlaceholder: "ค้นหาโน้ตหรือเนื้อหา (⌘K)...",
+    rootFilesHeader: "ไฟล์นอกโฟลเดอร์",
+    canDragHint: "ลากลงโฟลเดอร์ได้",
+    emptyFolder: "โฟลเดอร์ว่างเปล่า (ลากมาวางได้)",
+    emptyFolderHover: "วางโน้ตที่นี่เพื่อจัดเก็บ",
+    dropToUnfile: "วางเพื่อย้ายออก",
+    newFolderTitle: "ชื่อโฟลเดอร์ใหม่:",
+    newFolderPlaceholder: "เช่น คู่มือ, โปรเจกต์",
+    createBtn: "สร้าง",
+    cancelBtn: "ยกเลิก",
+    logoutTitle: "ออกจากระบบ",
+    logoutConfirm: "ต้องการออกจากระบบหรือไม่?",
+    deleteFolderConfirm: (name: string) => `ลบโฟลเดอร์ "${name}" หรือไม่?`,
+    deleteNoteConfirm: (title: string) => `ลบโน้ต "${title}" หรือไม่?`,
+    loadingVault: "กำลังโหลดคลังโน้ต...",
+    
+    // Main area
+    publicSharedBadge: "เปิดแชร์สาธารณะ",
+    cancelEdit: "ยกเลิก",
+    saveNote: "บันทึกโน้ต",
+    saving: "กำลังบันทึก...",
+    shareNote: "แชร์โน้ต",
+    editNote: "แก้ไข",
+    deleteNote: "ลบโน้ต",
+    noteTitleLabel: "ชื่อโน้ต",
+    noteTitlePlaceholder: "ใส่หัวข้อโน้ต...",
+    markdownContentLabel: "เนื้อหา Markdown",
+    markdownContentPlaceholder: "เขียน Markdown ที่นี่...",
+    
+    // Empty State Hero
+    emptyHeroTitle: "โยนไฟล์ Markdown (.md) เพื่อเริ่มอ่านได้ทันที",
+    emptyHeroDesc:
+      "ลากไฟล์ .md จากคอมพิวเตอร์ของคุณมาวาง หรือกดปุ่มด้านล่างเพื่อนำเข้าเอกสาร ระบบจัดหน้าให้อ่านง่าย สบายตา พร้อมสารบัญหัวข้อและไดอะแกรม Mermaid อัตโนมัติ",
+    dropNowBtn: "โยน / นำเข้าไฟล์ .md ตอนนี้",
+    createEmptyBtn: "สร้างโน้ตใหม่เปล่าๆ",
+    
+    // Stats Bar
+    wordsLabel: "คำ",
+    charsLabel: "ตัวอักษร",
+    readTimeLabel: "นาทีอ่าน",
+    lastUpdatedLabel: "แก้ไขล่าสุด",
+    createdLabel: "สร้างเมื่อ",
+    
+    // Share modal
+    shareModalTitle: "แชร์โน้ตนี้",
+    shareModalDesc: "เปิดให้ทุกคนที่มีลิงก์สามารถอ่านโน้ตนี้ได้ แม้ไม่ได้เป็นสมาชิกในระบบ",
+    isPublicOn: "เปิดการแชร์สาธารณะแล้ว",
+    isPublicOff: "โน้ตส่วนตัว (ปิดการแชร์)",
+    disableShareBtn: "ปิดการแชร์",
+    enableShareBtn: "เปิดแชร์ทันที",
+    shareLinkLabel: "ลิงก์สำหรับเปิดอ่านโน้ตนี้:",
+    copiedBtn: "คัดลอกแล้ว",
+    copyBtn: "คัดลอก",
+    closeBtn: "ปิดหน้าต่าง",
+
+    // Import modal
+    importModalTitle: "นำเข้าโน้ต (.md)",
+    targetFolderLabel: "จัดเก็บไว้ในโฟลเดอร์:",
+    rootFolderOption: "(ราก - ไม่มีโฟลเดอร์)",
+    dragDropBoxTitle: "คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่",
+    dragDropBoxSub: "รองรับไฟล์ .md, .markdown สามารถอัปโหลดพร้อมกันได้หลายไฟล์",
+    selectedFilesTitle: "ไฟล์ที่เลือกพร้อมนำเข้า:",
+    importAllBtn: (c: number) => `เริ่มนำเข้า ${c} ไฟล์`,
+    importing: "กำลังนำเข้า...",
+  },
+};

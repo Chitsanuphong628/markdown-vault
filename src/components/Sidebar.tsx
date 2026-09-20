@@ -16,6 +16,9 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import LanguageToggle from "./LanguageToggle";
+import { Language, I18N_MAIN } from "@/lib/i18n";
+
 export interface FolderItem {
   id: string;
   name: string;
@@ -35,6 +38,8 @@ interface SidebarProps {
   notes: NoteItem[];
   activeNoteId: string | null;
   selectedFolderId: string | null;
+  lang: Language;
+  setLang: (lang: Language) => void;
   onSelectNote: (id: string) => void;
   onSelectFolder: (id: string | null) => void;
   onOpenUpload: () => void;
@@ -55,6 +60,8 @@ export default function Sidebar({
   notes,
   activeNoteId,
   selectedFolderId,
+  lang,
+  setLang,
   onSelectNote,
   onSelectFolder,
   onOpenUpload,
@@ -68,6 +75,7 @@ export default function Sidebar({
   searchQuery,
   setSearchQuery,
 }: SidebarProps) {
+  const t = I18N_MAIN[lang];
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -145,91 +153,98 @@ export default function Sidebar({
   const getNotesInFolder = (folderId: string) => notes.filter((n) => n.folderId === folderId);
 
   return (
-    <aside className="w-72 bg-neutral-900 border-r border-neutral-800 flex flex-col h-full select-none">
+    <aside className="w-72 bg-neutral-900/95 border-r border-neutral-800/80 flex flex-col h-full select-none shrink-0 shadow-2xl z-20 backdrop-blur-md">
       {/* App Branding & User Profile */}
-      <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+      <div className="p-3.5 border-b border-neutral-800/80 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
             <BookOpen className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="font-semibold text-sm leading-tight text-neutral-100 flex items-center gap-1.5">
-              Markdown Vault
+          <div className="min-w-0">
+            <h2 className="font-semibold text-xs tracking-tight text-neutral-100 flex items-center gap-1.5">
+              <span>{t.appName}</span>
+              <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-mono px-1 py-0.2 rounded border border-indigo-500/20">
+                PRO
+              </span>
             </h2>
-            <p className="text-[11px] text-neutral-400 truncate max-w-[130px]">
+            <p className="text-[11px] text-neutral-400 truncate max-w-[125px]">
               {user.name || user.email}
             </p>
           </div>
         </div>
-        <button
-          onClick={onLogout}
-          title="ออกจากระบบ"
-          className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 rounded-lg transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+
+        <div className="flex items-center gap-1">
+          <LanguageToggle lang={lang} setLang={setLang} />
+          <button
+            onClick={onLogout}
+            title={t.logoutTitle}
+            className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Action Buttons: Import / New Note / New Folder */}
-      <div className="p-3 border-b border-neutral-800/80 space-y-2">
+      <div className="p-3 border-b border-neutral-800/70 space-y-2">
         <button
           onClick={onOpenUpload}
-          className="w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+          className="w-full py-2 px-3 bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-400 hover:text-indigo-300 border border-indigo-500/25 hover:border-indigo-500/40 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-indigo-500/10"
         >
           <UploadCloud className="w-4 h-4" />
-          <span>โยน / นำเข้าไฟล์ .md</span>
+          <span>{t.importMd}</span>
         </button>
 
         <div className="flex gap-1.5">
           <button
             onClick={() => onCreateNote(selectedFolderId)}
-            className="flex-1 py-1.5 px-2.5 bg-neutral-800 hover:bg-neutral-700/80 text-neutral-200 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="flex-1 py-1.5 px-2 bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/40 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
           >
             <FilePlus className="w-3.5 h-3.5 text-indigo-400" />
-            <span>สร้างโน้ต</span>
+            <span>{t.newNote}</span>
           </button>
           <button
             onClick={() => setIsCreatingFolder(true)}
-            className="flex-1 py-1.5 px-2.5 bg-neutral-800 hover:bg-neutral-700/80 text-neutral-200 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="flex-1 py-1.5 px-2 bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/40 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
           >
             <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-            <span>สร้างโฟลเดอร์</span>
+            <span>{t.newFolder}</span>
           </button>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="px-3 pt-3">
+      <div className="px-3 pt-2.5">
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="ค้นหาโน้ตหรือเนื้อหา..."
+            placeholder={t.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-neutral-950/70 border border-neutral-800/80 rounded-lg pl-8 pr-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
           />
         </div>
       </div>
 
       {/* New Folder Inline Input */}
       {isCreatingFolder && (
-        <form onSubmit={handleCreateFolderSubmit} className="p-3 bg-neutral-950/40 border-b border-neutral-800/60">
-          <div className="text-[11px] text-neutral-400 mb-1">ชื่อโฟลเดอร์ใหม่:</div>
+        <form onSubmit={handleCreateFolderSubmit} className="p-3 mx-3 mt-2 bg-neutral-950/70 border border-neutral-800 rounded-xl">
+          <div className="text-[11px] font-medium text-neutral-400 mb-1">{t.newFolderTitle}</div>
           <div className="flex gap-1.5">
             <input
               type="text"
               autoFocus
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder="e.g. คู่มือ, โปรเจกต์"
-              className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+              placeholder={t.newFolderPlaceholder}
+              className="flex-1 bg-neutral-900 border border-neutral-700/80 rounded-lg px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
-              className="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-500"
+              className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-500 transition-colors shadow-xs"
             >
-              สร้าง
+              {t.createBtn}
             </button>
             <button
               type="button"
@@ -244,7 +259,7 @@ export default function Sidebar({
 
       {/* Folder & Notes Tree Navigation */}
       <div
-        className="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs"
+        className="flex-1 overflow-y-auto p-2.5 space-y-1 text-xs"
         onDragOver={(e) => handleDragOver(e, "root")}
         onDragLeave={(e) => handleDragLeave(e, "root")}
         onDrop={(e) => handleDrop(e, null)}
@@ -259,17 +274,17 @@ export default function Sidebar({
             dragOverTarget === "root"
               ? "bg-indigo-600/20 border-2 border-dashed border-indigo-500 text-indigo-300 scale-[1.01]"
               : selectedFolderId === null && !activeNoteId
-              ? "bg-neutral-800 text-neutral-100 font-medium"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
+              ? "bg-neutral-800 text-neutral-100 font-medium shadow-xs"
+              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
           }`}
         >
           <div className="flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>โน้ตทั้งหมด ({notes.length})</span>
+            <span>{t.notesCount(notes.length)}</span>
           </div>
           {dragOverTarget === "root" && (
             <span className="text-[10px] text-indigo-400 font-medium animate-pulse">
-              วางเพื่อย้ายออก
+              {t.dropToUnfile}
             </span>
           )}
         </div>
@@ -324,7 +339,7 @@ export default function Sidebar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`ลบโฟลเดอร์ "${folder.name}" หรือไม่?`)) {
+                      if (confirm(t.deleteFolderConfirm(folder.name))) {
                         onDeleteFolder(folder.id);
                       }
                     }}
@@ -345,7 +360,7 @@ export default function Sidebar({
                 >
                   {folderNotes.length === 0 ? (
                     <div className="text-[11px] text-neutral-500 py-1.5 pl-2 italic border border-dashed border-neutral-800/60 rounded-md my-0.5">
-                      {isDragOver ? "วางโน้ตที่นี่เพื่อจัดเก็บ" : "โฟลเดอร์ว่างเปล่า (ลากมาวางได้)"}
+                      {isDragOver ? t.emptyFolderHover : t.emptyFolder}
                     </div>
                   ) : (
                     folderNotes.map((note) => (
@@ -367,7 +382,7 @@ export default function Sidebar({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`ลบโน้ต "${note.title}"?`)) {
+                            if (confirm(t.deleteNoteConfirm(note.title))) {
                               onDeleteNote(note.id);
                             }
                           }}
@@ -393,8 +408,8 @@ export default function Sidebar({
             onDrop={(e) => handleDrop(e, null)}
           >
             <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 px-2.5 mb-1 flex items-center justify-between">
-              <span>ไฟล์นอกโฟลเดอร์</span>
-              <span className="text-[9px] text-neutral-600 font-normal">ลากลงโฟลเดอร์ได้</span>
+              <span>{t.rootFilesHeader}</span>
+              <span className="text-[9px] text-neutral-600 font-normal">{t.canDragHint}</span>
             </div>
             {rootNotes.map((note) => (
               <div
@@ -415,7 +430,7 @@ export default function Sidebar({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`ลบโน้ต "${note.title}"?`)) {
+                    if (confirm(t.deleteNoteConfirm(note.title))) {
                       onDeleteNote(note.id);
                     }
                   }}

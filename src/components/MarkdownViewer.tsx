@@ -6,9 +6,10 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
-import { Check, Copy, FileText, Calendar, Folder as FolderIcon } from "lucide-react";
+import { Check, Copy, FileText, Calendar, Folder as FolderIcon, Clock, AlignLeft } from "lucide-react";
 import TableOfContents, { HeadingItem } from "./TableOfContents";
 import MermaidChart from "./MermaidChart";
+import { Language, I18N_MAIN } from "@/lib/i18n";
 
 interface MarkdownViewerProps {
   note: {
@@ -20,6 +21,7 @@ interface MarkdownViewerProps {
     folder?: { name: string } | null;
   };
   onUpdateContent?: (newContent: string) => Promise<void>;
+  lang?: Language;
 }
 
 function CodeBlock({ className, children, ...props }: any) {
@@ -103,12 +105,22 @@ function CodeBlock({ className, children, ...props }: any) {
   );
 }
 
-export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewerProps) {
+export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: MarkdownViewerProps) {
+  const t = I18N_MAIN[lang];
   const [content, setContent] = useState(note.content);
 
   useEffect(() => {
     setContent(note.content);
   }, [note.content]);
+
+  // Reading time & word count statistics
+  const stats = useMemo(() => {
+    const trimmed = content.trim();
+    const words = trimmed ? (trimmed.match(/\S+/g) || []).length : 0;
+    const chars = trimmed.length;
+    const readTimeMinutes = Math.max(1, Math.ceil(words / 200));
+    return { words, chars, readTimeMinutes };
+  }, [content]);
 
   // Extract headings for Table of Contents
   const headings = useMemo(() => {
@@ -160,26 +172,43 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
 
   return (
     <div className="flex-1 flex overflow-y-auto">
-      <div className="flex-1 max-w-4xl mx-auto px-6 py-8 min-w-0">
+      <div className="flex-1 max-w-4xl mx-auto px-8 py-9 min-w-0">
         {/* Document Header */}
-        <div className="mb-8 pb-6 border-b border-neutral-800">
-          <div className="flex items-center gap-2 text-xs text-neutral-400 mb-2">
+        <div className="mb-8 pb-6 border-b border-neutral-800/80">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400 mb-3">
             {note.folder && (
-              <span className="flex items-center gap-1 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium">
-                <FolderIcon className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="flex items-center gap-1.5 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium border border-neutral-700/50">
+                <FolderIcon className="w-3.5 h-3.5 text-amber-400" />
                 {note.folder.name}
               </span>
             )}
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              {new Date(note.updatedAt).toLocaleDateString("th-TH", {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })}
+            <span className="flex items-center gap-1.5 text-neutral-400">
+              <Calendar className="w-3.5 h-3.5 text-neutral-500" />
+              <span>
+                {t.lastUpdatedLabel}:{" "}
+                {new Date(note.updatedAt).toLocaleDateString(lang === "th" ? "th-TH" : "en-US", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </span>
+            <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
+            <span className="flex items-center gap-1.5 text-neutral-400">
+              <AlignLeft className="w-3.5 h-3.5 text-neutral-500" />
+              <span>
+                {stats.words.toLocaleString()} {t.wordsLabel} ({stats.chars.toLocaleString()} {t.charsLabel})
+              </span>
+            </span>
+            <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
+            <span className="flex items-center gap-1.5 text-neutral-400">
+              <Clock className="w-3.5 h-3.5 text-neutral-500" />
+              <span>
+                ~{stats.readTimeMinutes} {t.readTimeLabel}
+              </span>
             </span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-100 mb-2">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-100 leading-tight">
             {note.title}
           </h1>
         </div>
@@ -251,7 +280,7 @@ export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewer
       </div>
 
       {/* Dynamic Table of Contents */}
-      <TableOfContents headings={headings} />
+      <TableOfContents headings={headings} lang={lang} />
     </div>
   );
 }
