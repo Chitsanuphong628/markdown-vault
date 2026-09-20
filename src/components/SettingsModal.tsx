@@ -348,10 +348,10 @@ export default function SettingsModal({
             </div>
             <button
               onClick={() => setActiveTab("general")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
                 activeTab === "general"
-                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+                  ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
               <Globe className="w-3.5 h-3.5 text-indigo-400" />
@@ -360,10 +360,10 @@ export default function SettingsModal({
 
             <button
               onClick={() => setActiveTab("account")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
                 activeTab === "account"
-                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+                  ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
               <User className="w-3.5 h-3.5 text-neutral-400" />
@@ -375,10 +375,10 @@ export default function SettingsModal({
             </div>
             <button
               onClick={() => setActiveTab("data")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
                 activeTab === "data"
-                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+                  ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
               <Database className="w-3.5 h-3.5 text-emerald-400" />
@@ -387,10 +387,10 @@ export default function SettingsModal({
 
             <button
               onClick={() => setActiveTab("mcp")}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none border ${
                 activeTab === "mcp"
-                  ? "bg-[#181c29] text-indigo-300 border border-[#30374e] font-semibold"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620]"
+                  ? "bg-[#181c29] text-indigo-300 border-[#30374e] font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-[#131620] border-transparent"
               }`}
             >
               <Cpu className="w-3.5 h-3.5 text-indigo-400" />
@@ -421,20 +421,20 @@ export default function SettingsModal({
                     <div className="flex items-center gap-1.5 bg-[#131622] p-1 rounded-lg border border-[#202430]">
                       <button
                         onClick={() => setActiveConfigTab("claude")}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-all cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-colors cursor-pointer outline-none border ${
                           activeConfigTab === "claude"
-                            ? "bg-[#222738] text-indigo-300 font-semibold shadow-xs"
-                            : "text-neutral-400 hover:text-neutral-200"
+                            ? "bg-[#222738] text-indigo-300 font-semibold border-[#30374e] shadow-xs"
+                            : "text-neutral-400 hover:text-neutral-200 border-transparent"
                         }`}
                       >
                         Claude Desktop
                       </button>
                       <button
                         onClick={() => setActiveConfigTab("cursor")}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-all cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-colors cursor-pointer outline-none border ${
                           activeConfigTab === "cursor"
-                            ? "bg-[#222738] text-indigo-300 font-semibold shadow-xs"
-                            : "text-neutral-400 hover:text-neutral-200"
+                            ? "bg-[#222738] text-indigo-300 font-semibold border-[#30374e] shadow-xs"
+                            : "text-neutral-400 hover:text-neutral-200 border-transparent"
                         }`}
                       >
                         Cursor IDE
@@ -524,20 +524,20 @@ export default function SettingsModal({
                     <div className="flex items-center gap-1 bg-[#090b10] border border-[#202430] p-1 rounded-lg shrink-0">
                       <button
                         onClick={() => setLang && setLang("en")}
-                        className={`px-3 py-1 text-xs font-mono rounded-md transition-all cursor-pointer ${
+                        className={`px-3 py-1 text-xs font-mono rounded-md transition-colors cursor-pointer outline-none border ${
                           lang === "en"
-                            ? "bg-[#1f2433] text-indigo-300 font-semibold border border-[#323a52]"
-                            : "text-neutral-400 hover:text-neutral-200"
+                            ? "bg-[#1f2433] text-indigo-300 font-semibold border-[#323a52]"
+                            : "text-neutral-400 hover:text-neutral-200 border-transparent"
                         }`}
                       >
                         English
                       </button>
                       <button
                         onClick={() => setLang && setLang("th")}
-                        className={`px-3 py-1 text-xs font-mono rounded-md transition-all cursor-pointer ${
+                        className={`px-3 py-1 text-xs font-mono rounded-md transition-colors cursor-pointer outline-none border ${
                           lang === "th"
-                            ? "bg-[#1f2433] text-indigo-300 font-semibold border border-[#323a52]"
-                            : "text-neutral-400 hover:text-neutral-200"
+                            ? "bg-[#1f2433] text-indigo-300 font-semibold border-[#323a52]"
+                            : "text-neutral-400 hover:text-neutral-200 border-transparent"
                         }`}
                       >
                         ไทย
