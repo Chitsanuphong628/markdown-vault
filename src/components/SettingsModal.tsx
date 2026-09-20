@@ -78,6 +78,25 @@ export default function SettingsModal({
   const cancelExportRef = useRef(false);
 
 
+  // API Key state
+  const [apiKey, setApiKey] = useState<string>("");
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+
+  const handleGenerateApiKey = async () => {
+    setIsGeneratingKey(true);
+    try {
+      const res = await fetch("/api/auth/api-key", { method: "POST" });
+      const data = await res.json();
+      if (data.apiKey) {
+        setApiKey(data.apiKey);
+      }
+    } catch (err) {
+      console.error("Failed to generate API Key:", err);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
   // Delete account confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -272,15 +291,17 @@ export default function SettingsModal({
 
   if (!isOpen) return null;
 
+  const activeKeyEnv = apiKey
+    ? { NOTA_API_KEY: apiKey }
+    : { NOTA_USER_ID: user.id };
+
   const claudeConfig = JSON.stringify(
     {
       mcpServers: {
         "nota-vault": {
           command: "node",
           args: ["./mcp-server/index.js"],
-          env: {
-            NOTA_USER_ID: user.id,
-          },
+          env: activeKeyEnv,
         },
       },
     },
@@ -295,9 +316,7 @@ export default function SettingsModal({
           "nota-vault": {
             command: "node",
             args: ["./mcp-server/index.js"],
-            env: {
-              NOTA_USER_ID: user.id,
-            },
+            env: activeKeyEnv,
           },
         },
       },
@@ -421,6 +440,48 @@ export default function SettingsModal({
                   <span className="text-[10px] font-mono bg-[#181c29] text-neutral-400 border border-[#272d3d] px-2 py-0.5 rounded-md">
                     10 RPC Tools Active
                   </span>
+                </div>
+
+                {/* Personal Access Token (API Key) Security Section */}
+                <div className="p-3.5 rounded-xl bg-[#11141d] border border-[#202430] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Key className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-semibold text-neutral-200">Personal Access Token (MCP API Key)</span>
+                    </div>
+                    <button
+                      onClick={handleGenerateApiKey}
+                      disabled={isGeneratingKey}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isGeneratingKey ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : apiKey ? (
+                        "Regenerate Key"
+                      ) : (
+                        "Generate API Key"
+                      )}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-neutral-400 leading-relaxed">
+                    สร้าง Secure Token ยืนยันสิทธิ์แทน User ID ช่วยป้องกันการเข้าถึงโดยไม่ได้รับอนุญาต และป้องกันผู้อื่นสวมรอยใช้ MCP Server ของคุณ
+                  </p>
+
+                  {apiKey && (
+                    <div className="flex items-center gap-2 p-2 bg-[#090b10] border border-[#282f42] rounded-lg">
+                      <span className="font-mono text-xs text-amber-300 truncate flex-1 select-all">{apiKey}</span>
+                      <button
+                        onClick={() => handleCopy(apiKey, "apikey")}
+                        className="px-2 py-1 bg-[#181c29] hover:bg-[#222738] text-neutral-300 rounded text-[11px] font-mono shrink-0 cursor-pointer"
+                      >
+                        {copiedConfig === "apikey" ? "Copied!" : "Copy Key"}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Setup Config Section */}
