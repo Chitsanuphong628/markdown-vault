@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     const { data: user, error } = await supabaseAdmin
       .from("User")
-      .select("id, email, passwordHash, name")
+      .select("id, email, passwordHash, name, emailVerified")
       .eq("email", cleanEmail)
       .maybeSingle();
 
@@ -25,6 +25,18 @@ export async function POST(req: Request) {
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    // Check if email is verified
+    if (user.emailVerified === false) {
+      return NextResponse.json(
+        {
+          error: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ",
+          requiresVerification: true,
+          email: user.email,
+        },
+        { status: 403 }
+      );
     }
 
     const token = signToken({ userId: user.id, email: user.email });

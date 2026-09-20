@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, KeyRound, Mail, ArrowRight, Sparkles } from "lucide-react";
+import { BookOpen, KeyRound, Mail, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,10 +11,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [requiresVerification, setRequiresVerification] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setRequiresVerification(false);
     setLoading(true);
 
     try {
@@ -26,6 +28,9 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.requiresVerification) {
+          setRequiresVerification(true);
+        }
         throw new Error(data.error || "เข้าสู่ระบบไม่สำเร็จ");
       }
 
@@ -40,7 +45,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-center items-center px-4 relative overflow-hidden">
-      {/* Background glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-md bg-neutral-900/80 border border-neutral-800 backdrop-blur-xl p-8 rounded-2xl shadow-2xl relative z-10">
@@ -54,7 +58,17 @@ export default function LoginPage() {
 
         {error && (
           <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-sm">
-            {error}
+            <div>{error}</div>
+            {requiresVerification && (
+              <div className="mt-2">
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(email)}`}
+                  className="text-indigo-400 underline font-medium hover:text-indigo-300"
+                >
+                  คลิกที่นี่เพื่อไปหน้ายืนยันอีเมล →
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
@@ -84,7 +98,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-neutral-950/60 border border-neutral-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                className="w-full bg-neutral-950/60 border border-neutral-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 transition-all"
               />
             </div>
           </div>

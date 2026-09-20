@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, KeyRound, Mail, User, ArrowRight } from "lucide-react";
+import { BookOpen, KeyRound, Mail, User, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -30,7 +30,13 @@ export default function RegisterPage() {
         throw new Error(data.error || "สมัครสมาชิกไม่สำเร็จ");
       }
 
-      router.push("/");
+      // If email verification is required, navigate to verification page with demoOtp hint
+      if (data.requiresVerification) {
+        const otpQuery = data.demoOtp ? `&otp=${data.demoOtp}` : "";
+        router.push(`/verify-email?email=${encodeURIComponent(data.email)}${otpQuery}`);
+      } else {
+        router.push("/");
+      }
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -103,12 +109,17 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          <div className="p-3 bg-neutral-950/40 border border-neutral-800/80 rounded-xl flex items-center gap-2.5 text-xs text-neutral-400">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>มีขั้นตอนยืนยันความปลอดภัยทางอีเมลหลังสมัครสมาชิก</span>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
             className="w-full mt-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 disabled:opacity-50 cursor-pointer"
           >
-            {loading ? "กำลังสมัครสมาชิก..." : "สร้างบัญชี"}
+            {loading ? "กำลังสร้างบัญชี..." : "สร้างบัญชีและดำเนินการต่อ"}
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
