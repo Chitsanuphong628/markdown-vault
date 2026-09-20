@@ -545,20 +545,6 @@ export default function SettingsModal({
                     </div>
                   </div>
                 </div>
-
-                {/* System & Build Information */}
-                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-2 text-xs">
-                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    {t.sysArchTitle}
-                  </div>
-                  <div className="flex items-center gap-4 text-neutral-400 font-mono text-[11px]">
-                    <span>App: Nota Web</span>
-                    <span>•</span>
-                    <span>Stack: Next.js 16 + Turbopack</span>
-                    <span>•</span>
-                    <span>Storage: Supabase PostgreSQL</span>
-                  </div>
-                </div>
               </div>
             ) : activeTab === "account" ? (
               /* Account & Security Tab */
