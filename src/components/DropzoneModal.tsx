@@ -1,0 +1,234 @@
+"use client";
+
+import { useState, useRef } from "react";
+import { UploadCloud, X, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+
+interface DropzoneModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  folders: { id: string; name: string }[];
+  currentFolderId: string | null;
+  onSuccess: () => void;
+}
+
+export default function DropzoneModal({
+  isOpen,
+  onClose,
+  folders,
+  currentFolderId,
+  onSuccess,
+}: DropzoneModalProps) {
+  const [selectedFolder, setSelectedFolder] = useState<string>(currentFolderId || "");
+  const [isDragging, setIsDragging] = useState(false);
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const mdFiles = Array.from(e.dataTransfer.files).filter(
+        (file) => file.name.endsWith(".md") || file.name.endsWith(".markdown") || file.type === "text/markdown"
+      );
+      setFilesToUpload((prev) => [...prev, ...mdFiles]);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const mdFiles = Array.from(e.target.files).filter(
+        (file) => file.name.endsWith(".md") || file.name.endsWith(".markdown") || file.type === "text/markdown"
+      );
+      setFilesToUpload((prev) => [...prev, ...mdFiles]);
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFilesToUpload((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleStartUpload = async () => {
+    if (filesToUpload.length === 0) return;
+    setUploading(true);
+    setUploadStatus(null);
+
+    try {
+      for (const file of filesToUpload) {
+        const text = await file.text();
+        const title = file.name.replace(/\.(md|markdown)$/i, "");
+
+        await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content: text,
+            folderId: selectedFolder || null,
+          }),
+        });
+      }
+
+      setFilesToUpload([]);
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setUploadStatus("เกิดข้อผิดพลาดในการอัปโหลดไฟล์: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+          <div className="flex items-center gap-2">
+            <UploadCloud className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-semibold text-neutral-100">นำเข้าโน้ต (.md)</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto space-y-4">
+          {/* Target Folder Selector */}
+          <div>
+            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+              จัดเก็บไว้ในโฟลเดอร์:
+            </label>
+            <select
+              value={selectedFolder}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+              className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
+            >
+              <option value="">(ราก - ไม่มีโฟลเดอร์)</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Drag and Drop Zone */}
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-indigo-500 bg-indigo-500/10 scale-[1.01]"
+                : "border-neutral-800 hover:border-neutral-700 bg-neutral-950/40"
+            }`}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              accept=".md,.markdown"
+              className="hidden"
+            />
+            <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
+              <UploadCloud className="w-7 h-7" />
+            </div>
+            <p className="text-sm font-medium text-neutral-200 mb-1">
+              ลากไฟล์ .md มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์
+            </p>
+            <p className="text-xs text-neutral-500">รองรับไฟล์ Markdown หลายไฟล์พร้อมกัน</p>
+          </div>
+
+          {/* File List */}
+          {filesToUpload.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-neutral-400">
+                ไฟล์ที่เลือก ({filesToUpload.length} ไฟล์):
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                {filesToUpload.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-neutral-950/80 px-3 py-2 rounded-lg border border-neutral-800 text-xs"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span className="truncate text-neutral-300">{file.name}</span>
+                      <span className="text-neutral-500 shrink-0">
+                        ({(file.size / 1024).toFixed(1)} KB)
+                      </span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFile(idx);
+                      }}
+                      className="text-neutral-500 hover:text-rose-400 p-1 rounded"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {uploadStatus && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{uploadStatus}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-neutral-950/60 border-t border-neutral-800 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
+          >
+            ยกเลิก
+          </button>
+          <button
+            onClick={handleStartUpload}
+            disabled={filesToUpload.length === 0 || uploading}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                กำลังนำเข้า...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                นำเข้า {filesToUpload.length > 0 ? `(${filesToUpload.length})` : ""}
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
