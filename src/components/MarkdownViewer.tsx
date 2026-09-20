@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
+import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
 import { Check, Copy, FileText, Calendar, Folder as FolderIcon } from "lucide-react";
 import TableOfContents, { HeadingItem } from "./TableOfContents";
@@ -33,46 +33,70 @@ function CodeBlock({ className, children, ...props }: any) {
     );
   }
 
-  const language = className ? className.replace(/language-/, "") : "text";
+  const rawCode = String(children).replace(/\n$/, "");
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : "text";
 
   // If language is mermaid, render dynamic chart
   if (language === "mermaid") {
-    const chartContent = String(children).replace(/\n$/, "");
-    return <MermaidChart chart={chartContent} />;
+    return <MermaidChart chart={rawCode} />;
   }
 
   const handleCopy = () => {
-    const codeString = String(children).replace(/\n$/, "");
-    navigator.clipboard.writeText(codeString);
+    navigator.clipboard.writeText(rawCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Perform Highlight.js colorization
+  let highlightedHtml = "";
+  if (language && hljs.getLanguage(language)) {
+    try {
+      highlightedHtml = hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
+    } catch {
+      highlightedHtml = hljs.highlightAuto(rawCode).value;
+    }
+  } else {
+    try {
+      highlightedHtml = hljs.highlightAuto(rawCode).value;
+    } catch {
+      highlightedHtml = rawCode;
+    }
+  }
+
   return (
-    <div className="relative group my-4 rounded-xl overflow-hidden border border-neutral-800 bg-[#1e1e2e]">
-      <div className="flex items-center justify-between px-4 py-1.5 bg-neutral-900/90 border-b border-neutral-800/80 text-xs font-mono text-neutral-400">
-        <span className="uppercase tracking-wider">{language}</span>
+    <div className="relative group my-5 rounded-2xl overflow-hidden border border-neutral-800 bg-[#1e1e2e] shadow-lg">
+      <div className="flex items-center justify-between px-4 py-2 bg-neutral-900/90 border-b border-neutral-800/80 text-xs font-mono text-neutral-400">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+          </div>
+          <span className="uppercase tracking-wider font-semibold text-neutral-300 ml-2">{language}</span>
+        </div>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 py-1 px-2.5 rounded-md hover:bg-neutral-800 transition-colors text-neutral-300 text-xs cursor-pointer"
+          className="flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-neutral-800 transition-colors text-neutral-300 text-xs cursor-pointer"
         >
           {copied ? (
             <>
               <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400">Copied!</span>
+              <span className="text-emerald-400 font-medium">คัดลอกแล้ว</span>
             </>
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>Copy</span>
+              <span>คัดลอก</span>
             </>
           )}
         </button>
       </div>
       <pre className="p-4 overflow-x-auto text-sm leading-relaxed font-mono">
-        <code className={className} {...props}>
-          {children}
-        </code>
+        <code
+          className={`hljs language-${language}`}
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
       </pre>
     </div>
   );
@@ -145,7 +169,7 @@ export default function MarkdownViewer({ note }: MarkdownViewerProps) {
           [&>hr]:border-neutral-800 [&>hr]:my-8">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeSlug, rehypeHighlight]}
+            rehypePlugins={[rehypeSlug]}
             components={{
               code: CodeBlock,
             }}
