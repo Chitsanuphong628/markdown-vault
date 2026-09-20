@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -19,6 +19,7 @@ interface MarkdownViewerProps {
     updatedAt: string;
     folder?: { name: string } | null;
   };
+  onUpdateContent?: (newContent: string) => Promise<void>;
 }
 
 function CodeBlock({ className, children, ...props }: any) {
@@ -102,10 +103,16 @@ function CodeBlock({ className, children, ...props }: any) {
   );
 }
 
-export default function MarkdownViewer({ note }: MarkdownViewerProps) {
+export default function MarkdownViewer({ note, onUpdateContent }: MarkdownViewerProps) {
+  const [content, setContent] = useState(note.content);
+
+  useEffect(() => {
+    setContent(note.content);
+  }, [note.content]);
+
   // Extract headings for Table of Contents
   const headings = useMemo(() => {
-    const lines = note.content.split("\n");
+    const lines = content.split("\n");
     const headingList: HeadingItem[] = [];
 
     lines.forEach((line) => {
@@ -126,7 +133,37 @@ export default function MarkdownViewer({ note }: MarkdownViewerProps) {
     });
 
     return headingList;
-  }, [note.content]);
+  }, [content]);
+
+  // Handle Interactive Task List (Checkbox Toggle)
+  const handleToggleCheckbox = (targetIndex: number) => {
+    let currentTaskIndex = 0;
+    const lines = content.split("\n");
+
+    const newLines = lines.map((line) => {
+      const taskMatch = line.match(/^(\s*[-*+]\s+\[)([ xX])(\]\s+.*)$/);
+      if (taskMatch) {
+        if (currentTaskIndex === targetIndex) {
+          const isChecked = taskMatch[2].toLowerCase() === "x";
+          const newStatus = isChecked ? " " : "x";
+          currentTaskIndex++;
+          return `${taskMatch[1]}${newStatus}${taskMatch[3]}`;
+        }
+        currentTaskIndex++;
+      }
+      return line;
+    });
+
+    const updated = newLines.join("\n");
+    setContent(updated);
+
+    if (onUpdateContent) {
+      onUpdateContent(updated);
+    }
+  };
+
+  // Keep track of checkbox index during render
+  let checkboxCounter = 0;
 
   return (
     <div className="flex-1 flex overflow-y-auto">
@@ -172,9 +209,37 @@ export default function MarkdownViewer({ note }: MarkdownViewerProps) {
             rehypePlugins={[rehypeSlug]}
             components={{
               code: CodeBlock,
+              input: ({ type, checked, ...props }: any) => {
+                if (type === "checkbox") {
+                  const thisIndex = checkboxCounter++;
+                  return (
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checked)}
+                      onChange={() => handleToggleCheckbox(thisIndex)}
+                      className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600"
+                      {...props}
+                    />
+                  );
+                }
+                return <input type={type} {...props} />;
+              },
+              li: ({ children, className, ...props }: any) => {
+                const isTaskItem = className?.includes("task-list-item");
+                return (
+                  <li
+                    className={`${className || ""} ${
+                      isTaskItem ? "list-none -ml-5 flex items-center gap-1.5 py-0.5" : ""
+                    }`}
+                    {...props}
+                  >
+                    {children}
+                  </li>
+                );
+              },
             }}
           >
-            {note.content}
+            {content}
           </ReactMarkdown>
         </article>
       </div>

@@ -373,7 +373,19 @@ export default function AppHome() {
                 </div>
               </div>
             ) : (
-              <MarkdownViewer note={activeNote} />
+              <MarkdownViewer
+                note={activeNote}
+                onUpdateContent={async (newContent) => {
+                  if (!activeNoteId) return;
+                  setActiveNote((prev: any) => ({ ...prev, content: newContent }));
+                  setEditContent(newContent);
+                  await fetch(`/api/notes/${activeNoteId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content: newContent }),
+                  });
+                }}
+              />
             )}
           </>
         ) : (
