@@ -7,10 +7,11 @@ export async function POST(req: Request) {
     const { email, password } = await req.json();
 
     if (!email || !password) {
-      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+      return NextResponse.json({ error: "กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน" }, { status: 400 });
     }
 
     const cleanEmail = email.toLowerCase().trim();
+    const cleanPassword = password.trim();
 
     const { data: user, error } = await supabaseAdmin
       .from("User")
@@ -19,12 +20,13 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (error || !user) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+      return NextResponse.json({ error: "ไม่พบบัญชีอีเมลนี้ในระบบ (" + cleanEmail + ")" }, { status: 401 });
     }
 
-    const isMatch = await comparePassword(password, user.passwordHash);
+    // Compare clean password and original password
+    const isMatch = (await comparePassword(cleanPassword, user.passwordHash)) || (await comparePassword(password, user.passwordHash));
     if (!isMatch) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+      return NextResponse.json({ error: "รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง" }, { status: 401 });
     }
 
     // Check if email is verified
