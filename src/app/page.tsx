@@ -230,6 +230,44 @@ export default function AppHome() {
     }
   };
 
+  // Handle Move Note
+  const handleMoveNote = async (noteId: string, targetFolderId: string | null) => {
+    // Optimistic UI update
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, folderId: targetFolderId } : n))
+    );
+    try {
+      await fetch(`/api/notes/${noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderId: targetFolderId }),
+      });
+      loadNotes();
+    } catch (err) {
+      console.error("Failed to move note:", err);
+      loadNotes();
+    }
+  };
+
+  // Handle Move Folder
+  const handleMoveFolder = async (folderId: string, targetParentId: string | null) => {
+    // Optimistic UI update
+    setFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, parentId: targetParentId } : f))
+    );
+    try {
+      await fetch(`/api/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentId: targetParentId }),
+      });
+      loadFolders();
+    } catch (err) {
+      console.error("Failed to move folder:", err);
+      loadFolders();
+    }
+  };
+
   // Handle Logout
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -266,6 +304,8 @@ export default function AppHome() {
         onDeleteFolder={handleDeleteFolder}
         onCreateNote={handleCreateNote}
         onDeleteNote={handleDeleteNote}
+        onMoveNote={handleMoveNote}
+        onMoveFolder={handleMoveFolder}
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}

@@ -42,6 +42,8 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => Promise<void>;
   onCreateNote: (folderId?: string | null) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
+  onMoveNote?: (noteId: string, targetFolderId: string | null) => Promise<void>;
+  onMoveFolder?: (folderId: string, targetParentId: string | null) => Promise<void>;
   onLogout: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -60,6 +62,8 @@ export default function Sidebar({
   onDeleteFolder,
   onCreateNote,
   onDeleteNote,
+  onMoveNote,
+  onMoveFolder,
   onLogout,
   searchQuery,
   setSearchQuery,
@@ -79,6 +83,61 @@ export default function Sidebar({
     await onCreateFolder(newFolderName.trim(), selectedFolderId);
     setNewFolderName("");
     setIsCreatingFolder(false);
+  };
+
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null); // "root" or folder.id
+
+  const handleDragStartNote = (e: React.DragEvent, noteId: string) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "note", id: noteId }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragStartFolder = (e: React.DragEvent, folderId: string) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "folder", id: folderId }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverTarget !== targetId) {
+      setDragOverTarget(targetId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragOverTarget === targetId) {
+      setDragOverTarget(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTarget(null);
+
+    const rawData = e.dataTransfer.getData("application/json");
+    if (!rawData) return;
+
+    try {
+      const data = JSON.parse(rawData);
+      if (data.type === "note" && data.id) {
+        if (onMoveNote) {
+          await onMoveNote(data.id, targetFolderId);
+        }
+      } else if (data.type === "folder" && data.id) {
+        // Prevent moving folder into itself
+        if (data.id === targetFolderId) return;
+        if (onMoveFolder) {
+          await onMoveFolder(data.id, targetFolderId);
+        }
+      }
+    } catch (err) {
+      console.error("Drop error:", err);
+    }
   };
 
   // Group notes into folder
@@ -184,12 +243,22 @@ export default function Sidebar({
       )}
 
       {/* Folder & Notes Tree Navigation */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs">
-        {/* All Notes / Root selection */}
+      <div
+        className="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs"
+        onDragOver={(e) => handleDragOver(e, "root")}
+        onDragLeave={(e) => handleDragLeave(e, "root")}
+        onDrop={(e) => handleDrop(e, null)}
+      >
+        {/* All Notes / Root selection (Drop zone to move note out of folders) */}
         <div
           onClick={() => onSelectFolder(null)}
-          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
-            selectedFolderId === null && !activeNoteId
+          onDragOver={(e) => handleDragOver(e, "root")}
+          onDragLeave={(e) => handleDragLeave(e, "root")}
+          onDrop={(e) => handleDrop(e, null)}
+          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+            dragOverTarget === "root"
+              ? "bg-indigo-600/20 border-2 border-dashed border-indigo-500 text-indigo-300 scale-[1.01]"
+              : selectedFolderId === null && !activeNoteId
               ? "bg-neutral-800 text-neutral-100 font-medium"
               : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
           }`}
@@ -198,6 +267,11 @@ export default function Sidebar({
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span>โน้ตทั้งหมด ({notes.length})</span>
           </div>
+          {dragOverTarget === "root" && (
+            <span className="text-[10px] text-indigo-400 font-medium animate-pulse">
+              วางเพื่อย้ายออก
+            </span>
+          )}
         </div>
 
         {/* Folders List */}
@@ -205,16 +279,24 @@ export default function Sidebar({
           const isOpen = !!openFolders[folder.id];
           const folderNotes = getNotesInFolder(folder.id);
           const isSelected = selectedFolderId === folder.id;
+          const isDragOver = dragOverTarget === folder.id;
 
           return (
             <div key={folder.id} className="space-y-0.5">
               <div
+                draggable
+                onDragStart={(e) => handleDragStartFolder(e, folder.id)}
+                onDragOver={(e) => handleDragOver(e, folder.id)}
+                onDragLeave={(e) => handleDragLeave(e, folder.id)}
+                onDrop={(e) => handleDrop(e, folder.id)}
                 onClick={() => {
                   onSelectFolder(folder.id);
                   setOpenFolders((p) => ({ ...p, [folder.id]: !p[folder.id] }));
                 }}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                  isSelected
+                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-150 ${
+                  isDragOver
+                    ? "bg-indigo-600/25 border border-indigo-500 text-indigo-200 ring-2 ring-indigo-500/30 scale-[1.01]"
+                    : isSelected
                     ? "bg-indigo-950/40 text-indigo-300 font-medium"
                     : "text-neutral-300 hover:bg-neutral-800/60"
                 }`}
@@ -230,7 +312,11 @@ export default function Sidebar({
                       <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
                     )}
                   </span>
-                  <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <FolderIcon
+                    className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                      isDragOver ? "text-indigo-400 scale-110" : "text-amber-400"
+                    }`}
+                  />
                   <span className="truncate">{folder.name}</span>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -251,19 +337,26 @@ export default function Sidebar({
 
               {/* Sub-notes inside folder */}
               {isOpen && (
-                <div className="pl-6 space-y-0.5 border-l border-neutral-800/80 ml-3">
+                <div
+                  className="pl-6 space-y-0.5 border-l border-neutral-800/80 ml-3 transition-all"
+                  onDragOver={(e) => handleDragOver(e, folder.id)}
+                  onDragLeave={(e) => handleDragLeave(e, folder.id)}
+                  onDrop={(e) => handleDrop(e, folder.id)}
+                >
                   {folderNotes.length === 0 ? (
-                    <div className="text-[11px] text-neutral-500 py-1 pl-2 italic">
-                      โฟลเดอร์ว่างเปล่า
+                    <div className="text-[11px] text-neutral-500 py-1.5 pl-2 italic border border-dashed border-neutral-800/60 rounded-md my-0.5">
+                      {isDragOver ? "วางโน้ตที่นี่เพื่อจัดเก็บ" : "โฟลเดอร์ว่างเปล่า (ลากมาวางได้)"}
                     </div>
                   ) : (
                     folderNotes.map((note) => (
                       <div
                         key={note.id}
+                        draggable
+                        onDragStart={(e) => handleDragStartNote(e, note.id)}
                         onClick={() => onSelectNote(note.id)}
-                        className={`group flex items-center justify-between px-2 py-1 rounded-md cursor-pointer transition-colors ${
+                        className={`group flex items-center justify-between px-2 py-1 rounded-md cursor-grab active:cursor-grabbing transition-colors ${
                           activeNoteId === note.id
-                            ? "bg-indigo-600 text-white font-medium"
+                            ? "bg-indigo-600 text-white font-medium shadow-sm"
                             : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
                         }`}
                       >
@@ -293,17 +386,25 @@ export default function Sidebar({
 
         {/* Root Notes (No folder) */}
         {rootNotes.length > 0 && (
-          <div className="pt-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 px-2.5 mb-1">
-              ไฟล์นอกโฟลเดอร์
+          <div
+            className="pt-2"
+            onDragOver={(e) => handleDragOver(e, "root")}
+            onDragLeave={(e) => handleDragLeave(e, "root")}
+            onDrop={(e) => handleDrop(e, null)}
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 px-2.5 mb-1 flex items-center justify-between">
+              <span>ไฟล์นอกโฟลเดอร์</span>
+              <span className="text-[9px] text-neutral-600 font-normal">ลากลงโฟลเดอร์ได้</span>
             </div>
             {rootNotes.map((note) => (
               <div
                 key={note.id}
+                draggable
+                onDragStart={(e) => handleDragStartNote(e, note.id)}
                 onClick={() => onSelectNote(note.id)}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors ${
                   activeNoteId === note.id
-                    ? "bg-indigo-600 text-white font-medium"
+                    ? "bg-indigo-600 text-white font-medium shadow-sm"
                     : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
                 }`}
               >
