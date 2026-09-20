@@ -13,6 +13,7 @@ import {
   Database,
   Sliders,
   ShieldAlert,
+  LogOut,
 } from "lucide-react";
 import Image from "next/image";
 import JSZip from "jszip";
@@ -25,6 +26,7 @@ interface SettingsModalProps {
   notes?: Array<{ id: string; title: string; folderId: string | null }>;
   folders?: Array<{ id: string; name: string }>;
   onAccountDeleted?: () => void;
+  onLogout?: () => void;
   lang?: Language;
   setLang?: (lang: Language) => void;
 }
@@ -55,6 +57,7 @@ export default function SettingsModal({
   notes = [],
   folders = [],
   onAccountDeleted,
+  onLogout,
   lang = "en",
   setLang,
 }: SettingsModalProps) {
@@ -577,6 +580,32 @@ export default function SettingsModal({
                       <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Session & Sign Out */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                      {t.signOutSectionTitle}
+                    </div>
+                    <div className="text-xs text-neutral-400 mt-0.5">
+                      {t.signOutSectionDesc}
+                    </div>
+                  </div>
+                  {onLogout && (
+                    <button
+                      onClick={() => {
+                        if (confirm(t.logoutConfirm)) {
+                          onClose();
+                          onLogout();
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700/60 text-xs font-mono font-medium transition-all hover:text-white cursor-pointer shrink-0"
+                    >
+                      <LogOut className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>{t.signOutBtn}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Danger Zone: Account Deletion */}

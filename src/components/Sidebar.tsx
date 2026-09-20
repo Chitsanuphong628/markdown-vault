@@ -236,13 +236,6 @@ export default function Sidebar({
               <Settings className="w-4 h-4" />
             </button>
           )}
-          <button
-            onClick={onLogout}
-            title={t.logoutTitle}
-            className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
       </div>
 

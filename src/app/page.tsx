@@ -675,6 +675,7 @@ export default function AppHome() {
         folders={folders}
         lang={lang}
         setLang={setLang}
+        onLogout={handleLogout}
         onAccountDeleted={() => {
           setIsSettingsOpen(false);
           router.push("/login");
