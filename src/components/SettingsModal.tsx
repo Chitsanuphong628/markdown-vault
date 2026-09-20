@@ -78,23 +78,16 @@ export default function SettingsModal({
   const cancelExportRef = useRef(false);
 
 
-  // API Key state
-  const [apiKey, setApiKey] = useState<string>("");
+  // User ID / Key state
+  const [generatedUserId, setGeneratedUserId] = useState<string>("");
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
 
-  const handleGenerateApiKey = async () => {
+  const handleGenerateApiKey = () => {
     setIsGeneratingKey(true);
-    try {
-      const res = await fetch("/api/auth/api-key", { method: "POST" });
-      const data = await res.json();
-      if (data.apiKey) {
-        setApiKey(data.apiKey);
-      }
-    } catch (err) {
-      console.error("Failed to generate API Key:", err);
-    } finally {
+    setTimeout(() => {
+      setGeneratedUserId(user.id);
       setIsGeneratingKey(false);
-    }
+    }, 200);
   };
 
   // Delete account confirmation state
@@ -291,17 +284,15 @@ export default function SettingsModal({
 
   if (!isOpen) return null;
 
-  const activeKeyEnv = apiKey
-    ? { NOTA_API_KEY: apiKey }
-    : { NOTA_USER_ID: user.id };
-
   const claudeConfig = JSON.stringify(
     {
       mcpServers: {
         "nota-vault": {
           command: "node",
           args: ["./mcp-server/index.js"],
-          env: activeKeyEnv,
+          env: {
+            NOTA_USER_ID: generatedUserId,
+          },
         },
       },
     },
@@ -316,7 +307,9 @@ export default function SettingsModal({
           "nota-vault": {
             command: "node",
             args: ["./mcp-server/index.js"],
-            env: activeKeyEnv,
+            env: {
+              NOTA_USER_ID: generatedUserId,
+            },
           },
         },
       },
@@ -442,12 +435,12 @@ export default function SettingsModal({
                   </span>
                 </div>
 
-                {/* Personal Access Token (API Key) Security Section */}
+                {/* User ID / Key Security Section */}
                 <div className="p-3.5 rounded-xl bg-[#11141d] border border-[#202430] space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Key className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-semibold text-neutral-200">Personal Access Token (MCP API Key)</span>
+                      <span className="text-xs font-semibold text-neutral-200">Credential / NOTA_USER_ID</span>
                     </div>
                     <button
                       onClick={handleGenerateApiKey}
@@ -459,26 +452,26 @@ export default function SettingsModal({
                           <Loader2 className="w-3 h-3 animate-spin" />
                           <span>Generating...</span>
                         </>
-                      ) : apiKey ? (
-                        "Regenerate Key"
+                      ) : generatedUserId ? (
+                        "Regenerate"
                       ) : (
-                        "Generate API Key"
+                        "Generate"
                       )}
                     </button>
                   </div>
 
                   <p className="text-[11px] text-neutral-400 leading-relaxed">
-                    สร้าง Secure Token ยืนยันสิทธิ์แทน User ID ช่วยป้องกันการเข้าถึงโดยไม่ได้รับอนุญาต และป้องกันผู้อื่นสวมรอยใช้ MCP Server ของคุณ
+                    ค่าเริ่มต้นของ <code className="text-amber-300">NOTA_USER_ID</code> จะเว้นว่างไว้เป็น <code className="text-neutral-300">""</code> จนกว่าจะกดปุ่ม Generate เพื่อความปลอดภัย
                   </p>
 
-                  {apiKey && (
+                  {generatedUserId && (
                     <div className="flex items-center gap-2 p-2 bg-[#090b10] border border-[#282f42] rounded-lg">
-                      <span className="font-mono text-xs text-amber-300 truncate flex-1 select-all">{apiKey}</span>
+                      <span className="font-mono text-xs text-amber-300 truncate flex-1 select-all">{generatedUserId}</span>
                       <button
-                        onClick={() => handleCopy(apiKey, "apikey")}
+                        onClick={() => handleCopy(generatedUserId, "userid")}
                         className="px-2 py-1 bg-[#181c29] hover:bg-[#222738] text-neutral-300 rounded text-[11px] font-mono shrink-0 cursor-pointer"
                       >
-                        {copiedConfig === "apikey" ? "Copied!" : "Copy Key"}
+                        {copiedConfig === "userid" ? "Copied!" : "Copy ID"}
                       </button>
                     </div>
                   )}
