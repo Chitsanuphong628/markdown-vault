@@ -171,11 +171,8 @@ export default function RegisterPage() {
             />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            <span className="text-lg font-bold tracking-tight text-white">
               Nota
-              <span className="text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 px-2 py-0.5 rounded-full">
-                v2.0
-              </span>
             </span>
             <span className="text-[11px] text-neutral-400">Intelligent Knowledge Cloud</span>
           </div>

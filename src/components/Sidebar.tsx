@@ -167,11 +167,8 @@ export default function Sidebar({
             />
           </div>
           <div className="min-w-0">
-            <h2 className="font-bold text-sm tracking-tight text-neutral-100 flex items-center gap-1.5">
-              <span>{t.appName}</span>
-              <span className="text-[9px] bg-indigo-500/15 text-indigo-400 font-mono px-1 py-0.2 rounded border border-indigo-500/25">
-                PRO
-              </span>
+            <h2 className="font-bold text-sm tracking-tight text-neutral-100">
+              {t.appName}
             </h2>
             <p className="text-[11px] text-neutral-400 truncate max-w-[125px]">
               {user.name || user.email}
