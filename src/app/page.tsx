@@ -607,6 +607,12 @@ export default function AppHome() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         user={user}
+        notes={notes}
+        folders={folders}
+        onAccountDeleted={() => {
+          setIsSettingsOpen(false);
+          router.push("/login");
+        }}
       />
     </div>
   );

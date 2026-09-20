@@ -16,13 +16,20 @@ import {
   Sliders,
   Sparkles,
   ExternalLink,
+  Download,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import Image from "next/image";
+import JSZip from "jszip";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: { id: string; name: string; email: string };
+  notes?: Array<{ id: string; title: string; folderId: string | null }>;
+  folders?: Array<{ id: string; name: string }>;
+  onAccountDeleted?: () => void;
 }
 
 interface ToolItem {
@@ -44,10 +51,91 @@ const MCP_TOOLS: ToolItem[] = [
   { name: "scan_and_cleanup", category: "Maintenance", desc: "Check vault integrity and re-index unfiled notes" },
 ];
 
-export default function SettingsModal({ isOpen, onClose, user }: SettingsModalProps) {
+export default function SettingsModal({
+  isOpen,
+  onClose,
+  user,
+  notes = [],
+  folders = [],
+  onAccountDeleted,
+}: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<"mcp" | "account">("mcp");
   const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Delete account confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
+  const handleExportVault = async () => {
+    setIsExporting(true);
+    try {
+      const zip = new JSZip();
+      const folderMap = new Map<string, string>();
+      folders.forEach((f) => folderMap.set(f.id, f.name));
+
+      // Fetch all notes with content
+      for (const note of notes) {
+        try {
+          const res = await fetch(`/api/notes/${note.id}`);
+          const data = await res.json();
+          if (data.note) {
+            const folderName = note.folderId ? folderMap.get(note.folderId) || "Unfiled" : null;
+            const fileName = `${note.title.replace(/[\/\\?%*:|"<>]/g, "-") || "untitled"}.md`;
+            if (folderName) {
+              zip.folder(folderName)?.file(fileName, data.note.content || "");
+            } else {
+              zip.file(fileName, data.note.content || "");
+            }
+          }
+        } catch (e) {
+          console.error(`Failed to export note ${note.id}:`, e);
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nota-vault-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Vault export failed:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== user.email) {
+      setDeleteError("Please type your exact email to confirm.");
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteError("");
+    try {
+      const res = await fetch("/api/auth/delete-account", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete account");
+      }
+      if (onAccountDeleted) {
+        onAccountDeleted();
+      }
+    } catch (err: any) {
+      setDeleteError(err.message);
+      setIsDeletingAccount(false);
+    }
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -274,14 +362,15 @@ export default function SettingsModal({ isOpen, onClose, user }: SettingsModalPr
             ) : (
               /* Account & System Tab */
               <div className="space-y-4">
+                {/* Profile Information (No UUID) */}
                 <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
                   <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    User Credentials
+                    Profile Information
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-neutral-500 block text-[11px] mb-0.5">Name</span>
-                      <span className="text-neutral-200 font-medium font-mono">
+                      <span className="text-neutral-200 font-medium">
                         {user.name || "Default User"}
                       </span>
                     </div>
@@ -289,26 +378,87 @@ export default function SettingsModal({ isOpen, onClose, user }: SettingsModalPr
                       <span className="text-neutral-500 block text-[11px] mb-0.5">Email</span>
                       <span className="text-neutral-200 font-medium font-mono">{user.email}</span>
                     </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-neutral-500 block text-[11px] mb-0.5">UUID</span>
-                      <code className="text-neutral-400 font-mono text-[11px] bg-[#090b10] px-2 py-1 rounded border border-[#202430] inline-block">
-                        {user.id}
-                      </code>
-                    </div>
                   </div>
                 </div>
 
-                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-2 text-xs">
-                  <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-                    System Architecture
+                {/* Data Management: Export Vault */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
+                        Data Management
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        Download an offline archive of all your notes and folders as a .zip file.
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleExportVault}
+                      disabled={isExporting}
+                      className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] border border-[#262c3d] text-neutral-200 text-xs font-mono font-medium flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${isExporting ? "animate-bounce" : ""}`} />
+                      {isExporting ? "Exporting..." : "Export Vault (.zip)"}
+                    </button>
                   </div>
-                  <div className="flex items-center gap-4 text-neutral-400 font-mono text-[11px]">
-                    <span>App: Nota Web</span>
-                    <span>•</span>
-                    <span>Stack: Next.js 16 + Turbopack</span>
-                    <span>•</span>
-                    <span>DB: Supabase</span>
+                </div>
+
+                {/* Danger Zone: Account Deletion */}
+                <div className="border border-rose-950/40 bg-rose-950/10 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-rose-400">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Danger Zone
                   </div>
+                  <div className="text-xs text-neutral-400 leading-relaxed">
+                    Permanently delete your account, notes, and folders from Supabase. This action cannot be undone.
+                  </div>
+
+                  {!showDeleteConfirm ? (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-mono font-medium transition-all"
+                    >
+                      Delete Account
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-[#0c0e14] border border-rose-900/30 rounded-lg space-y-2.5">
+                      <div className="text-xs text-neutral-300">
+                        Please type <code className="font-mono text-rose-300 bg-rose-950/50 px-1 py-0.5 rounded border border-rose-800/40">{user.email}</code> to confirm:
+                      </div>
+                      <input
+                        type="text"
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        placeholder={user.email}
+                        className="w-full bg-[#11141d] border border-[#202430] focus:border-rose-500/50 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 font-mono outline-none"
+                      />
+                      {deleteError && (
+                        <div className="text-[11px] text-rose-400 font-mono">
+                          {deleteError}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={handleDeleteAccount}
+                          disabled={deleteConfirmText !== user.email || isDeletingAccount}
+                          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-medium transition-all disabled:opacity-30 disabled:hover:bg-rose-600 flex items-center gap-1.5"
+                        >
+                          {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          {isDeletingAccount ? "Deleting..." : "Permanently Delete"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowDeleteConfirm(false);
+                            setDeleteConfirmText("");
+                            setDeleteError("");
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-[#181c26] hover:bg-[#222736] text-neutral-400 text-xs font-mono transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
