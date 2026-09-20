@@ -144,11 +144,6 @@ export default function LoginPage() {
 
         {/* Center: Showcase Content & Interactive Preview Cards */}
         <div className="relative z-10 my-auto py-10 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 text-xs font-medium mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{t.heroTag}</span>
-          </div>
-
           <h1 className="text-4xl xl:text-5xl font-extrabold tracking-tight text-white leading-tight mb-4">
             {t.heroTitle}
           </h1>
