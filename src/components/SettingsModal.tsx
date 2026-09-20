@@ -14,6 +14,7 @@ import {
   Sliders,
   ShieldAlert,
   LogOut,
+  Key,
 } from "lucide-react";
 import Image from "next/image";
 import JSZip from "jszip";
@@ -75,6 +76,25 @@ export default function SettingsModal({
     isWaiting: boolean;
   }>({ total: 0, completed: 0, statusText: "", isWaiting: false });
   const cancelExportRef = useRef(false);
+
+  // API Key state
+  const [apiKey, setApiKey] = useState<string>("");
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+
+  const handleGenerateApiKey = async () => {
+    setIsGeneratingKey(true);
+    try {
+      const res = await fetch("/api/auth/api-key", { method: "POST" });
+      const data = await res.json();
+      if (data.apiKey) {
+        setApiKey(data.apiKey);
+      }
+    } catch (err) {
+      console.error("Failed to generate API Key:", err);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
 
   // Delete account confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -270,15 +290,17 @@ export default function SettingsModal({
 
   if (!isOpen) return null;
 
+  const activeKeyEnv = apiKey
+    ? { NOTA_API_KEY: apiKey }
+    : { NOTA_USER_ID: user.id };
+
   const claudeConfig = JSON.stringify(
     {
       mcpServers: {
         "nota-vault": {
           command: "node",
           args: ["./mcp-server/index.js"],
-          env: {
-            NOTA_USER_ID: user.id,
-          },
+          env: activeKeyEnv,
         },
       },
     },
@@ -293,9 +315,7 @@ export default function SettingsModal({
           "nota-vault": {
             command: "node",
             args: ["./mcp-server/index.js"],
-            env: {
-              NOTA_USER_ID: user.id,
-            },
+            env: activeKeyEnv,
           },
         },
       },
@@ -419,6 +439,50 @@ export default function SettingsModal({
                   <span className="text-[10px] font-mono bg-[#181c29] text-neutral-400 border border-[#272d3d] px-2 py-0.5 rounded-md">
                     10 RPC Tools Active
                   </span>
+                </div>
+
+                {/* API Key Security Section (Production Standard) */}
+                <div className="border border-[#202430] bg-[#11141d] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Key className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-300">
+                          Personal Access Token (API Key)
+                        </span>
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        {apiKey
+                          ? "Secured with cryptographic signature. Embedded in config below."
+                          : "Generate a signed token so Claude & Cursor access only your vault securely."}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleGenerateApiKey}
+                      disabled={isGeneratingKey}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-medium transition-all disabled:opacity-50 cursor-pointer shadow-xs shrink-0"
+                    >
+                      {isGeneratingKey ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Key className="w-3.5 h-3.5" />
+                      )}
+                      <span>{apiKey ? "Regenerate Key" : "Generate API Key"}</span>
+                    </button>
+                  </div>
+
+                  {apiKey && (
+                    <div className="p-2.5 bg-[#090b10] border border-[#232938] rounded-lg flex items-center justify-between font-mono text-xs">
+                      <span className="text-indigo-300 truncate mr-2">{apiKey.slice(0, 24)}••••••••••••••••</span>
+                      <button
+                        onClick={() => handleCopy(apiKey, "raw_key")}
+                        className="text-[11px] text-neutral-400 hover:text-neutral-200 shrink-0 cursor-pointer"
+                      >
+                        {copiedConfig === "raw_key" ? "Copied!" : "Copy Key"}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Setup Config Section */}

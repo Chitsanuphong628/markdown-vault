@@ -15,6 +15,23 @@ export function signToken(payload: TokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
 
+export function signApiKey(payload: TokenPayload): string {
+  return "nota_sec_" + jwt.sign({ ...payload, type: "mcp_api_key" }, JWT_SECRET, { expiresIn: "365d" });
+}
+
+export function verifyApiKey(token: string): TokenPayload | null {
+  try {
+    const rawToken = token.startsWith("nota_sec_") ? token.replace("nota_sec_", "") : token;
+    const decoded = jwt.verify(rawToken, JWT_SECRET) as TokenPayload & { type?: string };
+    if (decoded && decoded.userId) {
+      return { userId: decoded.userId, email: decoded.email };
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
 export function verifyToken(token: string): TokenPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as TokenPayload;

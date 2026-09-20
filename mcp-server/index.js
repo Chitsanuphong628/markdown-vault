@@ -7,11 +7,13 @@ const {
   ListToolsRequestSchema,
 } = require("@modelcontextprotocol/sdk/types.js");
 const { createClient } = require("@supabase/supabase-js");
+const jwt = require("jsonwebtoken");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const jwtSecret = process.env.JWT_SECRET || "markdown-vault-super-secret-key-2026";
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
@@ -150,10 +152,29 @@ const TOOLS = [
   },
 ];
 
-// Helper to get active user ID (checks env NOTA_USER_ID first, then custom arg, then fallback)
+// Helper to get active user ID securely via API Key or legacy NOTA_USER_ID
 async function getTargetUserId(customUserId) {
+  // 1. High Security: Verify signed NOTA_API_KEY
+  if (process.env.NOTA_API_KEY) {
+    try {
+      const rawToken = process.env.NOTA_API_KEY.startsWith("nota_sec_")
+        ? process.env.NOTA_API_KEY.replace("nota_sec_", "")
+        : process.env.NOTA_API_KEY;
+      const decoded = jwt.verify(rawToken, jwtSecret);
+      if (decoded && decoded.userId) {
+        return decoded.userId;
+      }
+    } catch (err) {
+      console.error("Invalid or expired NOTA_API_KEY signature:", err.message);
+      throw new Error("Invalid or expired NOTA_API_KEY. Please generate a new key in Nota Settings.");
+    }
+  }
+
+  // 2. Direct user ID override (for backward-compatible dev mode)
   if (process.env.NOTA_USER_ID) return process.env.NOTA_USER_ID;
   if (customUserId) return customUserId;
+
+  // 3. Fallback to default user in DB
   const { data } = await supabase.from("User").select("id").limit(1).single();
   return data ? data.id : null;
 }
