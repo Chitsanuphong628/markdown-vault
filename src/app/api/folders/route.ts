@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
+import { assertOwnedFolder } from "@/lib/ownership";
+import { rejectCrossOrigin } from "@/lib/security";
+import { z } from "zod";
+
+const folderSchema = z.object({ name: z.string().trim().min(1).max(120), parentId: z.string().uuid().nullable().optional() });
 
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: folders, error } = await supabaseAdmin
+  const { data: folders, error } = await getSupabaseAdmin()
     .from("Folder")
     .select("*")
     .eq("userId", user.id)
@@ -18,20 +23,22 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { name, parentId } = await req.json();
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "Folder name is required" }, { status: 400 });
-    }
+    const parsed = folderSchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
+    const { name, parentId } = parsed.data;
+    if (!(await assertOwnedFolder(parentId, user.id))) return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });
 
-    const { data: folder, error } = await supabaseAdmin
+    const { data: folder, error } = await getSupabaseAdmin()
       .from("Folder")
       .insert([
         {
-          name: name.trim(),
+          name,
           parentId: parentId || null,
           userId: user.id,
         },

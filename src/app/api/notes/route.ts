@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
 import { assertOwnedFolder } from "@/lib/ownership";
-import { rejectCrossOrigin } from "@/lib/security";
+import { escapePostgrestSearch, rejectCrossOrigin } from "@/lib/security";
 import { z } from "zod";
 import { isNoteColorKey, parseNoteTheme } from "@/lib/noteTheme";
 
@@ -38,7 +38,8 @@ export async function GET(req: Request) {
   }
 
   if (q) {
-    query = query.or(`title.ilike.%${q}%,content.ilike.%${q}%`);
+    const searchTerm = escapePostgrestSearch(q);
+    query = query.or(`title.ilike.%${searchTerm}%,content.ilike.%${searchTerm}%`);
   }
 
   const { data: notes, error } = await query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);

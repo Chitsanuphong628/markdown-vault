@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { rejectCrossOrigin } from "@/lib/security";
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // 1. Delete all Notes of this user
-    await supabaseAdmin.from("Note").delete().eq("userId", user.id);
-
-    // 2. Delete all Folders of this user
-    await supabaseAdmin.from("Folder").delete().eq("userId", user.id);
-
-    // 3. Delete user record
-    const { error: deleteUserError } = await supabaseAdmin
-      .from("User")
-      .delete()
-      .eq("id", user.id);
+    const { error: deleteUserError } = await getSupabaseAdmin()
+      .rpc("delete_nota_account", { target_user_id: user.id });
 
     if (deleteUserError) {
       throw new Error(deleteUserError.message);

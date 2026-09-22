@@ -262,7 +262,7 @@ export default function LoginPage() {
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-neutral-300">{t.passwordLabel}</label>
                 <Link
-                  href="/forgot-password"
+                  href="/reset-password"
                   className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
                   {t.forgotPass}

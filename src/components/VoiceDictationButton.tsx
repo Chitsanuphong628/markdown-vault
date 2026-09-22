@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Sparkles, Loader2, Check } from "lucide-react";
 import { Language } from "@/lib/i18n";
 
@@ -86,7 +86,7 @@ export default function VoiceDictationButton({
     };
   }, [lang]);
 
-  const toggleListening = () => {
+  const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return;
 
     if (isListening) {
@@ -102,7 +102,13 @@ export default function VoiceDictationButton({
         console.error("Failed to start speech recognition", err);
       }
     }
-  };
+  }, [isListening, lang]);
+
+  useEffect(() => {
+    const handleEditorVoiceCommand = () => toggleListening();
+    window.addEventListener("nota:trigger-voice", handleEditorVoiceCommand);
+    return () => window.removeEventListener("nota:trigger-voice", handleEditorVoiceCommand);
+  }, [toggleListening]);
 
   if (!isSupported) {
     return null; // Graceful degradation on unsupported browsers

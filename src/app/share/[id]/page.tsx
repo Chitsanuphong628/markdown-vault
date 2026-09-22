@@ -90,11 +90,6 @@ export default function ShareNotePage({ params }: SharePageProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          {note.user && (
-            <span className="text-xs text-neutral-400 hidden sm:inline">
-              แชร์โดย <strong className="text-neutral-200">{note.user.name || note.user.email}</strong>
-            </span>
-          )}
           <Link
             href="/"
             className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-colors"

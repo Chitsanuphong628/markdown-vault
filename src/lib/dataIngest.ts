@@ -44,7 +44,7 @@ async function convertDelimitedToMarkdown(
 ): Promise<DataIngestResult> {
   const text = await file.text();
 
-  const results = Papa.parse<Record<string, any>>(text, {
+  const results = Papa.parse<Record<string, unknown>>(text, {
     delimiter: delimiter,
     header: true,
     skipEmptyLines: true,
@@ -250,10 +250,11 @@ ${JSON.stringify(data, null, 2)}
 `;
 
     return { title, markdown: mdContent };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     return {
       title,
-      markdown: `# ${title}\n\n> ⚠️ Invalid JSON file: ${err.message}\n\n\`\`\`text\n${text}\n\`\`\``,
+      markdown: `# ${title}\n\n> ⚠️ Invalid JSON file: ${errMsg}\n\n\`\`\`text\n${text}\n\`\`\``,
     };
   }
 }

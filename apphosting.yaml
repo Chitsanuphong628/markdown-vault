@@ -1,9 +1,0 @@
-kind: AppHosting
-schemaVersion: v1alpha
-env:
-  - variable: NEXT_PUBLIC_SUPABASE_URL
-    value: "https://nbdkkwomonxcrdwuvsaj.supabase.co"
-  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
-    value: "sb_publishable_UZ5fJqWpnPa8Fq4E62BQ_g_zkTjXHlV"
-  - variable: JWT_SECRET
-    value: "markdown-vault-super-secret-key-2026"

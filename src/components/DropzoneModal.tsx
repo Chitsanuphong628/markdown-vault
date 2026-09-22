@@ -98,8 +98,9 @@ export default function DropzoneModal({
       setFilesToUpload([]);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      setUploadStatus("เกิดข้อผิดพลาดในการอัปโหลดไฟล์: " + err.message);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setUploadStatus("เกิดข้อผิดพลาดในการอัปโหลดไฟล์: " + errMsg);
     } finally {
       setUploading(false);
     }

@@ -17,19 +17,10 @@ function VerifyEmailForm() {
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
-    const tokenParam = searchParams.get("token");
-    const otpParam = searchParams.get("otp");
-
     if (emailParam) setEmail(emailParam);
-    if (otpParam) setOtp(otpParam);
-
-    // Auto verify if token is in query string
-    if (emailParam && tokenParam) {
-      handleVerify(emailParam, undefined, tokenParam);
-    }
   }, [searchParams]);
 
-  const handleVerify = async (targetEmail: string, targetOtp?: string, targetToken?: string) => {
+  const handleVerify = async (targetEmail: string, targetOtp?: string) => {
     setError("");
     setLoading(true);
 
@@ -40,7 +31,6 @@ function VerifyEmailForm() {
         body: JSON.stringify({
           email: targetEmail || email,
           otp: targetOtp || otp,
-          token: targetToken,
         }),
       });
 
@@ -64,6 +54,21 @@ function VerifyEmailForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleVerify(email, otp);
+  };
+
+  const resendCode = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "ไม่สามารถส่งรหัสใหม่ได้");
+      setSuccess(data.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "ไม่สามารถส่งรหัสใหม่ได้");
+    } finally { setLoading(false); }
   };
 
   return (
@@ -131,6 +136,10 @@ function VerifyEmailForm() {
           <ArrowRight className="w-4 h-4" />
         </button>
       </form>
+
+      <button type="button" disabled={loading || !email} onClick={resendCode} className="mt-4 w-full text-sm text-emerald-400 hover:text-emerald-300 disabled:opacity-50">
+        ส่งรหัสยืนยันใหม่
+      </button>
 
       <div className="mt-6 text-center text-sm text-neutral-400">
         ต้องการกลับไปหน้าเข้าสู่ระบบ?{" "}

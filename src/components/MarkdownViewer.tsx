@@ -1,15 +1,29 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeSlug from "rehype-slug";
+import rehypeKatex from "rehype-katex";
 import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
-import { Check, Copy, FileText, Calendar, Folder as FolderIcon, Clock, AlignLeft } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Calendar,
+  Folder as FolderIcon,
+  Clock,
+  AlignLeft,
+  Search,
+  ChevronUp,
+  ChevronDown,
+  X,
+} from "lucide-react";
 import TableOfContents, { HeadingItem } from "./TableOfContents";
 import MermaidChart from "./MermaidChart";
 import { Language, I18N_MAIN } from "@/lib/i18n";
+import { parseNoteTheme, NOTE_THEMES } from "@/lib/noteTheme";
 
 interface MarkdownViewerProps {
   note: {
@@ -24,7 +38,12 @@ interface MarkdownViewerProps {
   lang?: Language;
 }
 
-function CodeBlock({ className, children, ...props }: any) {
+interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
+  className?: string;
+  children?: React.ReactNode;
+}
+
+function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isInline = !className;
 
@@ -107,24 +126,33 @@ function CodeBlock({ className, children, ...props }: any) {
 
 export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: MarkdownViewerProps) {
   const t = I18N_MAIN[lang];
+  // Synchronize internal content when note changes
+  const [prevNoteId, setPrevNoteId] = useState(note.id);
+  const [prevNoteContent, setPrevNoteContent] = useState(note.content);
   const [content, setContent] = useState(note.content);
 
-  useEffect(() => {
+  if (note.id !== prevNoteId || note.content !== prevNoteContent) {
+    setPrevNoteId(note.id);
+    setPrevNoteContent(note.content);
     setContent(note.content);
-  }, [note.content]);
+  }
+
+  // Extract theme color and clean content without raw frontmatter
+  const { color, cleanContent } = useMemo(() => parseNoteTheme(content), [content]);
+  const activeTheme = NOTE_THEMES[color] || NOTE_THEMES.default;
 
   // Reading time & word count statistics
   const stats = useMemo(() => {
-    const trimmed = content.trim();
+    const trimmed = cleanContent.trim();
     const words = trimmed ? (trimmed.match(/\S+/g) || []).length : 0;
     const chars = trimmed.length;
     const readTimeMinutes = Math.max(1, Math.ceil(words / 200));
     return { words, chars, readTimeMinutes };
-  }, [content]);
+  }, [cleanContent]);
 
   // Extract headings for Table of Contents
   const headings = useMemo(() => {
-    const lines = content.split("\n");
+    const lines = cleanContent.split("\n");
     const headingList: HeadingItem[] = [];
 
     lines.forEach((line) => {
@@ -170,8 +198,252 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
     }
   };
 
+  // In-Document Search (Find Bar ⌘F) state
+  const [isFindOpen, setIsFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const articleRef = useRef<HTMLElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const matchesRef = useRef<HTMLElement[]>([]);
+
+  // Clear all highlights
+  const clearHighlights = () => {
+    if (!articleRef.current) return;
+    const marks = articleRef.current.querySelectorAll("mark.nota-find-highlight");
+    marks.forEach((mark) => {
+      const parent = mark.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
+        parent.normalize();
+      }
+    });
+    matchesRef.current = [];
+    setTotalMatches(0);
+    setCurrentMatchIndex(0);
+  };
+
+  // Scroll to active match
+  const scrollToMatch = (index: number) => {
+    const marks = matchesRef.current;
+    if (marks.length === 0 || index < 0 || index >= marks.length) return;
+
+    marks.forEach((m, idx) => {
+      if (idx === index) {
+        m.classList.add("nota-find-active");
+        m.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        m.classList.remove("nota-find-active");
+      }
+    });
+  };
+
+  // Highlight matches using TreeWalker
+  useEffect(() => {
+    const query = findQuery.trim();
+    if (!isFindOpen || !query || !articleRef.current) {
+      clearHighlights();
+      return;
+    }
+
+    clearHighlights();
+
+    const root = articleRef.current;
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          if (!node.textContent || !node.textContent.toLowerCase().includes(query.toLowerCase())) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          let parent = node.parentElement;
+          while (parent && parent !== root) {
+            const tag = parent.tagName.toLowerCase();
+            // Skip code, script, style, and already highlighted marks
+            if (tag === "code" || tag === "pre" || tag === "mark" || tag === "svg") {
+              return NodeFilter.FILTER_REJECT;
+            }
+            parent = parent.parentElement;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      }
+    );
+
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) {
+      textNodes.push(walker.currentNode as Text);
+    }
+
+    const createdMarks: HTMLElement[] = [];
+    const lowerQuery = query.toLowerCase();
+
+    textNodes.forEach((node) => {
+      const parent = node.parentNode;
+      if (!parent) return;
+
+      const text = node.nodeValue || "";
+      const lowerText = text.toLowerCase();
+      let startIndex = 0;
+      let matchIdx = lowerText.indexOf(lowerQuery, startIndex);
+
+      if (matchIdx === -1) return;
+
+      const fragment = document.createDocumentFragment();
+
+      while (matchIdx !== -1) {
+        if (matchIdx > startIndex) {
+          fragment.appendChild(document.createTextNode(text.substring(startIndex, matchIdx)));
+        }
+
+        const mark = document.createElement("mark");
+        mark.className = "nota-find-highlight";
+        mark.textContent = text.substring(matchIdx, matchIdx + query.length);
+        fragment.appendChild(mark);
+        createdMarks.push(mark);
+
+        startIndex = matchIdx + query.length;
+        matchIdx = lowerText.indexOf(lowerQuery, startIndex);
+      }
+
+      if (startIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.substring(startIndex)));
+      }
+
+      parent.replaceChild(fragment, node);
+    });
+
+    matchesRef.current = createdMarks;
+    setTotalMatches(createdMarks.length);
+    setCurrentMatchIndex(createdMarks.length > 0 ? 1 : 0);
+
+    if (createdMarks.length > 0) {
+      createdMarks[0].classList.add("nota-find-active");
+      createdMarks[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [findQuery, isFindOpen, content, note.id]);
+
+  const handleNextMatch = () => {
+    if (totalMatches === 0) return;
+    const nextIdx = currentMatchIndex >= totalMatches ? 1 : currentMatchIndex + 1;
+    setCurrentMatchIndex(nextIdx);
+    scrollToMatch(nextIdx - 1);
+  };
+
+  const handlePrevMatch = () => {
+    if (totalMatches === 0) return;
+    const prevIdx = currentMatchIndex <= 1 ? totalMatches : currentMatchIndex - 1;
+    setCurrentMatchIndex(prevIdx);
+    scrollToMatch(prevIdx - 1);
+  };
+
+  // Keyboard shortcut for Cmd/Ctrl + F, Escape, and custom toolbar event
+  useEffect(() => {
+    const handleOpenFind = () => {
+      setIsFindOpen(true);
+      setTimeout(() => {
+        findInputRef.current?.focus();
+        findInputRef.current?.select();
+      }, 50);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        handleOpenFind();
+      } else if (e.key === "Escape" && isFindOpen) {
+        e.preventDefault();
+        setIsFindOpen(false);
+        setFindQuery("");
+        clearHighlights();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("nota:open-find", handleOpenFind);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("nota:open-find", handleOpenFind);
+    };
+  }, [isFindOpen]);
+
   return (
-    <div className="flex-1 flex overflow-hidden min-h-0">
+    <div className={`flex-1 flex overflow-hidden min-h-0 relative ${activeTheme.editorBg} transition-colors duration-300`}>
+      {/* Floating In-Document Find Bar (⌘F) */}
+      {isFindOpen && (
+        <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-6 z-30 bg-neutral-900 border border-neutral-750 shadow-2xl rounded-xl p-2 flex flex-wrap items-center gap-2 text-xs animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
+          <div className="relative flex items-center w-full sm:w-auto">
+            <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 pointer-events-none" />
+            <input
+              ref={findInputRef}
+              type="text"
+              placeholder={t.findPlaceholder}
+              value={findQuery}
+              onChange={(e) => setFindQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (e.shiftKey) {
+                    handlePrevMatch();
+                  } else {
+                    handleNextMatch();
+                  }
+                }
+              }}
+              className="w-full sm:w-60 bg-neutral-950 border border-neutral-800 rounded-lg pl-8 pr-2.5 py-1.5 text-neutral-100 text-xs placeholder-neutral-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
+          {/* Matches Counter */}
+          <span className="text-[11px] font-mono text-neutral-400 min-w-[3.5rem] text-center select-none">
+            {findQuery.trim()
+              ? totalMatches > 0
+                ? `${currentMatchIndex}/${totalMatches}`
+                : t.noMatches
+              : ""}
+          </span>
+
+          <div className="h-4 w-[1px] bg-neutral-800" />
+
+          {/* Navigation Buttons */}
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={handlePrevMatch}
+              disabled={totalMatches === 0}
+              title={t.prevMatch}
+              className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextMatch}
+              disabled={totalMatches === 0}
+              title={t.nextMatch}
+              className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Close Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsFindOpen(false);
+              setFindQuery("");
+              clearHighlights();
+            }}
+            title={t.closeFind}
+            className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer ml-0.5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Main Reading & Article Scroll Area */}
       <div className="flex-1 overflow-y-auto min-w-0">
         <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-9">
@@ -216,7 +488,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
         </div>
 
         {/* Markdown Render Area */}
-        <article className="prose prose-invert prose-neutral max-w-none 
+        <article ref={articleRef} className="prose prose-invert prose-neutral max-w-none
           [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-8 [&>h1]:mb-4 [&>h1]:pb-2 [&>h1]:border-b [&>h1]:border-neutral-800
           [&>h2]:text-2xl [&>h2]:font-semibold [&>h2]:mt-8 [&>h2]:mb-3 [&>h2]:pb-1.5 [&>h2]:border-b [&>h2]:border-neutral-800/60
           [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:mt-6 [&>h3]:mb-2
@@ -229,19 +501,25 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
           [&_td]:border [&_td]:border-neutral-800 [&_td]:px-4 [&_td]:py-2 [&_td]:text-neutral-300
           [&>hr]:border-neutral-800 [&>hr]:my-8">
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeSlug]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeSlug, rehypeKatex]}
             components={{
               code: CodeBlock,
-              li: ({ node, children, className, ...props }: any) => {
+              li: ({ node, children, className, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { node?: { position?: { start?: { line?: number } } } }) => {
                 const isTaskItem = className?.includes("task-list-item");
                 const lineNumber = node?.position?.start?.line;
 
                 if (isTaskItem && lineNumber) {
                   // Find checkbox inside children and clone it with proper lineNumber
-                  const modifiedChildren = React.Children.map(children, (child: any) => {
-                    if (React.isValidElement(child) && (child.type === "input" || (child.props as any)?.type === "checkbox")) {
-                      const childProps = child.props as any;
+                  const modifiedChildren = React.Children.map(children, (child) => {
+                    if (
+                      React.isValidElement(child) &&
+                      typeof child.props === "object" &&
+                      child.props !== null &&
+                      "type" in child.props &&
+                      (child.props as { type: string }).type === "checkbox"
+                    ) {
+                      const childProps = child.props as { checked?: boolean };
                       return (
                         <input
                           type="checkbox"
@@ -276,7 +554,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
               },
             }}
           >
-            {content}
+            {cleanContent}
           </ReactMarkdown>
         </article>
         </div>

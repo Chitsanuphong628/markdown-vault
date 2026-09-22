@@ -85,5 +85,6 @@ begin
 end;
 $$;
 revoke all on function public.delete_nota_account(text) from public, anon, authenticated;
+grant execute on function public.delete_nota_account(text) to service_role;
 
 commit;

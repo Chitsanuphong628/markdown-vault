@@ -21,9 +21,11 @@ import {
   Menu,
   BarChart2,
   Palette,
+  Code,
 } from "lucide-react";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import ChartWizardModal from "@/components/ChartWizardModal";
+import RichNoteEditor from "@/components/RichNoteEditor";
 import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 
@@ -91,6 +93,9 @@ export default function AppHome() {
   // Chart Wizard & Color Picker state
   const [isChartWizardOpen, setIsChartWizardOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+
+  // Editor mode state (Visual WYSIWYG vs Raw Markdown)
+  const [editorMode, setEditorMode] = useState<"visual" | "markdown">("visual");
 
   // Check auth on mount
   useEffect(() => {
@@ -755,15 +760,60 @@ export default function AppHome() {
                   />
                 </div>
                 <div className="flex-1 flex flex-col">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                    {t.markdownContentLabel}
-                  </label>
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="w-full flex-1 min-h-[500px] bg-neutral-900/90 border border-neutral-800 rounded-xl p-5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 leading-relaxed resize-y shadow-inner"
-                    placeholder={t.markdownContentPlaceholder}
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                      {editorMode === "visual"
+                        ? (lang === "th" ? "เนื้อหาโน้ต (Visual Editor)" : "Note Content (Visual)")
+                        : t.markdownContentLabel}
+                    </label>
+
+                    {/* Mode Switcher Toggle */}
+                    <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setEditorMode("visual")}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          editorMode === "visual"
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>{lang === "th" ? "จัดหน้าง่าย (Visual)" : "Visual"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditorMode("markdown")}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          editorMode === "markdown"
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        <Code className="w-3 h-3" />
+                        <span>{lang === "th" ? "โค้ดดิบ (Markdown)" : "Markdown"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {editorMode === "visual" ? (
+                    <RichNoteEditor
+                      initialContent={editContent}
+                      onChange={(newMarkdown) => setEditContent(newMarkdown)}
+                      onOpenChartWizard={() => setIsChartWizardOpen(true)}
+                      onTriggerVoice={() => {
+                        window.dispatchEvent(new CustomEvent("nota:trigger-voice"));
+                      }}
+                      lang={lang}
+                    />
+                  ) : (
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full flex-1 min-h-[500px] bg-neutral-900/90 border border-neutral-800 rounded-xl p-5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 leading-relaxed resize-y shadow-inner"
+                      placeholder={t.markdownContentPlaceholder}
+                    />
+                  )}
                 </div>
               </div>
             ) : (

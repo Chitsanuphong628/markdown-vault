@@ -1,10 +1,13 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
-import { supabaseAdmin } from "./supabase";
+import crypto from "crypto";
+import { getSupabaseAdmin } from "./supabase";
+import { getTokenPepper, getWebJwtSecret } from "./env";
 
-const JWT_SECRET = process.env.JWT_SECRET || "markdown-vault-super-secret-key-2026";
 const COOKIE_NAME = "token";
+const SESSION_ISSUER = "nota-web";
+const SESSION_AUDIENCE = "nota-web";
 
 export interface TokenPayload {
   userId: string;
@@ -12,30 +15,20 @@ export interface TokenPayload {
 }
 
 export function signToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
-}
-
-export function signApiKey(payload: TokenPayload): string {
-  return "nota_sec_" + jwt.sign({ ...payload, type: "mcp_api_key" }, JWT_SECRET, { expiresIn: "365d" });
-}
-
-export function verifyApiKey(token: string): TokenPayload | null {
-  try {
-    const rawToken = token.startsWith("nota_sec_") ? token.replace("nota_sec_", "") : token;
-    const decoded = jwt.verify(rawToken, JWT_SECRET) as TokenPayload & { type?: string };
-    if (decoded && decoded.userId) {
-      return { userId: decoded.userId, email: decoded.email };
-    }
-    return null;
-  } catch (error) {
-    return null;
-  }
+  return jwt.sign(payload, getWebJwtSecret(), {
+    expiresIn: "7d",
+    issuer: SESSION_ISSUER,
+    audience: SESSION_AUDIENCE,
+  });
 }
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
-  } catch (error) {
+    return jwt.verify(token, getWebJwtSecret(), {
+      issuer: SESSION_ISSUER,
+      audience: SESSION_AUDIENCE,
+    }) as TokenPayload;
+  } catch {
     return null;
   }
 }
@@ -48,6 +41,21 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
+export function createOneTimeCode(): string {
+  return crypto.randomInt(100000, 1_000_000).toString();
+}
+
+export function hashOneTimeCode(code: string): string {
+  return crypto.createHmac("sha256", getTokenPepper()).update(code).digest("hex");
+}
+
+export function matchesOneTimeCode(code: string, expectedHash: string | null | undefined): boolean {
+  if (!expectedHash || !/^\d{6}$/.test(code)) return false;
+  const actual = Buffer.from(hashOneTimeCode(code), "utf8");
+  const expected = Buffer.from(expectedHash, "utf8");
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
 export async function getSessionUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -56,9 +64,9 @@ export async function getSessionUser() {
   const payload = verifyToken(token);
   if (!payload) return null;
 
-  const { data: user, error } = await supabaseAdmin
+  const { data: user, error } = await getSupabaseAdmin()
     .from("User")
-    .select("id, email, name")
+    .select("id, email, name, emailVerified")
     .eq("id", payload.userId)
     .single();
 

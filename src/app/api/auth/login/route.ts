@@ -59,8 +59,8 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Login error:", error);
-    return NextResponse.json({ error: error.message || "Failed to login" }, { status: 500 });
+    return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 500 });
   }
 }

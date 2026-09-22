@@ -13,10 +13,15 @@ require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const jwtSecret = process.env.JWT_SECRET || "markdown-vault-super-secret-key-2026";
+const jwtSecret = process.env.MCP_JWT_SECRET;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
+if (process.env.ENABLE_MCP !== "true") {
+  console.error("MCP is disabled for this release. Set ENABLE_MCP=true only after its security review.");
+  process.exit(1);
+}
+
+if (!supabaseUrl || !supabaseKey || !jwtSecret || !process.env.NOTA_API_KEY) {
+  console.error("Missing required MCP configuration");
   process.exit(1);
 }
 
@@ -152,31 +157,15 @@ const TOOLS = [
   },
 ];
 
-// Helper to get active user ID securely via API Key or legacy NOTA_USER_ID
-async function getTargetUserId(customUserId) {
-  // 1. High Security: Verify signed NOTA_API_KEY
-  if (process.env.NOTA_API_KEY) {
-    try {
-      const rawToken = process.env.NOTA_API_KEY.startsWith("nota_sec_")
-        ? process.env.NOTA_API_KEY.replace("nota_sec_", "")
-        : process.env.NOTA_API_KEY;
-      const decoded = jwt.verify(rawToken, jwtSecret);
-      if (decoded && decoded.userId) {
-        return decoded.userId;
-      }
-    } catch (err) {
-      console.error("Invalid or expired NOTA_API_KEY signature:", err.message);
-      throw new Error("Invalid or expired NOTA_API_KEY. Please generate a new key in Nota Settings.");
-    }
+async function getTargetUserId() {
+  try {
+    const rawToken = process.env.NOTA_API_KEY.replace("nota_sec_", "");
+    const decoded = jwt.verify(rawToken, jwtSecret, { issuer: "nota-mcp", audience: "nota-mcp" });
+    if (decoded && decoded.type === "mcp_api_key" && decoded.userId) return decoded.userId;
+  } catch (err) {
+    console.error("Invalid or expired NOTA_API_KEY signature:", err.message);
   }
-
-  // 2. Direct user ID override (for backward-compatible dev mode)
-  if (process.env.NOTA_USER_ID) return process.env.NOTA_USER_ID;
-  if (customUserId) return customUserId;
-
-  // 3. Fallback to default user in DB
-  const { data } = await supabase.from("User").select("id").limit(1).single();
-  return data ? data.id : null;
+  throw new Error("Invalid MCP credential");
 }
 
 // List Tools Handler
@@ -332,8 +321,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "share_note": {
         const { data, error } = await supabase
           .from("Note")
-          .update({ isShared: Boolean(args.isShared), updatedAt: new Date().toISOString() })
+          .update({ isShared: args.isShared, updatedAt: new Date().toISOString() })
           .eq("id", args.id)
+          .eq("userId", targetUserId)
           .select("id, title, isShared")
           .single();
 
@@ -348,13 +338,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "scan_and_cleanup": {
-        const { data: users, count: userCount } = await supabase.from("User").select("id, email", { count: "exact" });
-        const { data: folders, count: folderCount } = await supabase.from("Folder").select("id, name", { count: "exact" });
-        const { data: notes, count: noteCount } = await supabase.from("Note").select("id, title, isShared", { count: "exact" });
+        const { data: folders, count: folderCount } = await supabase.from("Folder").select("id, name", { count: "exact" }).eq("userId", targetUserId);
+        const { data: notes, count: noteCount } = await supabase.from("Note").select("id, title, isShared", { count: "exact" }).eq("userId", targetUserId);
 
         const summary = {
-          totalUsers: userCount,
-          users,
           totalFolders: folderCount,
           folders,
           totalNotes: noteCount,

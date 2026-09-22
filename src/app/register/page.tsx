@@ -138,8 +138,7 @@ export default function RegisterPage() {
       }
 
       if (data.requiresVerification) {
-        const otpQuery = data.demoOtp ? `&otp=${data.demoOtp}` : "";
-        router.push(`/verify-email?email=${encodeURIComponent(data.email)}${otpQuery}`);
+        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
       } else {
         router.push("/");
       }

@@ -1,0 +1,3 @@
+export default function PrivacyPage() {
+  return <main className="mx-auto min-h-screen max-w-3xl bg-neutral-950 px-6 py-16 text-neutral-100"><h1 className="text-3xl font-bold">นโยบายความเป็นส่วนตัว</h1><p className="mt-6 text-neutral-300">ร่างสำหรับการอนุมัติก่อนเปิดใช้จริง: Nota เก็บบัญชีผู้ใช้ โน้ต โฟลเดอร์ และข้อมูลที่จำเป็นต่อการให้บริการเท่านั้น</p><p className="mt-4 text-neutral-300">ผู้ใช้สามารถส่งออกและลบบัญชีของตนได้จากการตั้งค่า ข้อมูลโน้ตที่แชร์จะเข้าถึงได้เฉพาะผู้ที่มีลิงก์ และจะหยุดเข้าถึงทันทีเมื่อเจ้าของยกเลิกการแชร์</p><p className="mt-4 text-amber-300">หน้านี้ต้องได้รับการตรวจและอนุมัติข้อความจริงโดยเจ้าของผลิตภัณฑ์ก่อน public launch</p></main>;
+}

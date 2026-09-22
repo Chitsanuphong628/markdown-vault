@@ -93,8 +93,8 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Verification error:", err);
-    return NextResponse.json({ error: err.message || "Failed to verify email" }, { status: 500 });
+    return NextResponse.json({ error: "ไม่สามารถยืนยันอีเมลได้" }, { status: 500 });
   }
 }
