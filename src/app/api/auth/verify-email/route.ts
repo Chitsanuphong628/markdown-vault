@@ -1,51 +1,78 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
-import { signToken } from "@/lib/auth";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import { matchesOneTimeCode, signToken } from "@/lib/auth";
+import { enforceAuthRateLimit, getAccountRateLimitKey } from "@/lib/rate-limit";
+import { getClientAddress, rejectCrossOrigin } from "@/lib/security";
+import { z } from "zod";
+
+const verifySchema = z.object({ email: z.string().trim().email().max(254), otp: z.string().regex(/^\d{6}$/) });
 
 export async function POST(req: Request) {
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
+  if (!(await enforceAuthRateLimit(`verify:${getClientAddress(req)}`))) {
+    return NextResponse.json({ error: "ลองใหม่ภายหลัง" }, { status: 429 });
+  }
   try {
-    const { email, otp, token } = await req.json();
-
-    if (!email) {
+    const parsed = verifySchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json({ error: "ระบุอีเมลไม่ถูกต้อง" }, { status: 400 });
     }
+    const { email, otp } = parsed.data;
 
     const cleanEmail = email.toLowerCase().trim();
 
+    if (!(await enforceAuthRateLimit(getAccountRateLimitKey("verify", cleanEmail)))) {
+      return NextResponse.json({ error: "ลองใหม่ภายหลัง" }, { status: 429 });
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
     const { data: user, error } = await supabaseAdmin
       .from("User")
-      .select("id, email, name, verificationOtp, verificationToken, emailVerified")
+      .select("id, email, name, verificationCodeHash, verificationExpiresAt, verificationAttempts, emailVerified")
       .eq("email", cleanEmail)
       .maybeSingle();
 
-    if (error || !user) {
-      return NextResponse.json({ error: "ไม่พบบัญชีผู้ใช้งานนี้" }, { status: 404 });
-    }
+    if (error || !user) return NextResponse.json({ error: "รหัสยืนยันไม่ถูกต้องหรือหมดอายุ" }, { status: 400 });
 
     if (user.emailVerified) {
-      return NextResponse.json({ error: "อีเมลนี้ได้รับการยืนยันแล้ว สามารถเข้าสู่ระบบได้ทันที" }, { status: 400 });
+      return NextResponse.json({ error: "อีเมลนี้ได้รับการยืนยันแล้ว" }, { status: 400 });
     }
 
-    const isValidOtp = otp && user.verificationOtp === otp.trim();
-    const isValidToken = token && user.verificationToken === token.trim();
-
-    if (!isValidOtp && !isValidToken) {
+    const expired = !user.verificationExpiresAt || new Date(user.verificationExpiresAt).getTime() < Date.now();
+    const valid = !expired && (user.verificationAttempts ?? 0) < 5 && matchesOneTimeCode(otp, user.verificationCodeHash);
+    if (!valid) {
+      const attempts = user.verificationAttempts ?? 0;
+      if (attempts < 5) {
+        await supabaseAdmin.from("User")
+          .update({ verificationAttempts: attempts + 1 })
+          .eq("id", user.id)
+          .eq("verificationAttempts", attempts)
+          .lt("verificationAttempts", 5);
+      }
       return NextResponse.json({ error: "รหัส OTP หรือลิงก์ยืนยันไม่ถูกต้อง" }, { status: 400 });
     }
 
     // Mark as verified and clear OTP
-    const { error: updateError } = await supabaseAdmin
+    const { data: consumedUser, error: updateError } = await supabaseAdmin
       .from("User")
       .update({
         emailVerified: true,
-        verificationOtp: null,
-        verificationToken: null,
+        verificationCodeHash: null,
+        verificationExpiresAt: null,
+        verificationAttempts: 0,
         updatedAt: new Date().toISOString(),
       })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .eq("emailVerified", false)
+      .eq("verificationCodeHash", user.verificationCodeHash)
+      .gt("verificationExpiresAt", new Date().toISOString())
+      .lt("verificationAttempts", 5)
+      .select("id")
+      .maybeSingle();
 
-    if (updateError) {
-      throw updateError;
+    if (updateError || !consumedUser) {
+      return NextResponse.json({ error: "รหัส OTP ถูกใช้แล้วหรือหมดอายุ" }, { status: 400 });
     }
 
     // Auto-login session upon successful verification

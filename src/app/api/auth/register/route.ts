@@ -1,19 +1,36 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
-import { hashPassword } from "@/lib/auth";
-import crypto from "crypto";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import { createOneTimeCode, hashOneTimeCode, hashPassword } from "@/lib/auth";
+import { sendVerificationCode } from "@/lib/email";
+import { enforceAuthRateLimit, getAccountRateLimitKey } from "@/lib/rate-limit";
+import { getClientAddress, rejectCrossOrigin } from "@/lib/security";
+import { z } from "zod";
+
+const registerSchema = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(8).max(128),
+  name: z.string().trim().min(1).max(100).optional(),
+});
 
 export async function POST(req: Request) {
-  try {
-    const { email, password, name } = await req.json();
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
+  if (!(await enforceAuthRateLimit(`register:${getClientAddress(req)}`))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
 
-    if (!email || !password) {
-      return NextResponse.json({ error: "กรุณาระบุอีเมลและรหัสผ่าน" }, { status: 400 });
+  try {
+    const parsed = registerSchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: "ข้อมูลสมัครสมาชิกไม่ถูกต้อง" }, { status: 400 });
+    const { email, password, name } = parsed.data;
+    const cleanEmail = email.toLowerCase();
+
+    if (!(await enforceAuthRateLimit(getAccountRateLimitKey("register", cleanEmail)))) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-
     // Check existing user
+    const supabaseAdmin = getSupabaseAdmin();
     const { data: existingUser } = await supabaseAdmin
       .from("User")
       .select("id")
@@ -25,10 +42,8 @@ export async function POST(req: Request) {
     }
 
     const passwordHash = await hashPassword(password);
-    
-    // Generate 6-digit OTP and Verification Token
-    const verificationOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationCode = createOneTimeCode();
+    const verificationExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
     const { data: user, error } = await supabaseAdmin
       .from("User")
@@ -38,8 +53,9 @@ export async function POST(req: Request) {
           passwordHash,
           name: name || cleanEmail.split("@")[0],
           emailVerified: false,
-          verificationToken,
-          verificationOtp,
+          verificationCodeHash: hashOneTimeCode(verificationCode),
+          verificationExpiresAt,
+          verificationAttempts: 0,
         },
       ])
       .select("id, email, name, emailVerified")
@@ -49,20 +65,20 @@ export async function POST(req: Request) {
       throw new Error(error?.message || "Failed to create user");
     }
 
-    // In a production environment with SMTP/Resend, you would send an email here.
-    // For easy testing and demonstration, we return the demo OTP.
+    await sendVerificationCode(user.email, verificationCode);
     return NextResponse.json(
       {
         success: true,
         message: "ลงทะเบียนสำเร็จ กรุณายืนยันอีเมลของคุณ",
         requiresVerification: true,
         email: user.email,
-        demoOtp: verificationOtp,
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Registration error:", error);
-    return NextResponse.json({ error: error.message || "Failed to register" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to register";
+    const status = message === "Email delivery is not configured" || message === "Unable to send verification email" ? 503 : 500;
+    return NextResponse.json({ error: status === 503 ? "ยังไม่สามารถส่งอีเมลยืนยันได้" : "ไม่สามารถสมัครสมาชิกได้" }, { status });
   }
 }

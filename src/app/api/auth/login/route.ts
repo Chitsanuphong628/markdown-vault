@@ -1,51 +1,53 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { comparePassword, signToken } from "@/lib/auth";
+import { enforceAuthRateLimit, getAccountRateLimitKey } from "@/lib/rate-limit";
+import { getClientAddress, rejectCrossOrigin } from "@/lib/security";
+import { z } from "zod";
+
+const loginSchema = z.object({ email: z.string().trim().email().max(254), password: z.string().min(1).max(128) });
 
 export async function POST(req: Request) {
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
+  if (!(await enforceAuthRateLimit(`login:${getClientAddress(req)}`))) {
+    return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 429 });
+  }
   try {
-    const { email, password } = await req.json();
-
-    if (!email || !password) {
+    const parsed = loginSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json({ error: "กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน" }, { status: 400 });
     }
+    const { email, password } = parsed.data;
 
     const cleanEmail = email.toLowerCase().trim();
     const cleanPassword = password.trim();
 
-    const { data: user, error } = await supabaseAdmin
+    if (!(await enforceAuthRateLimit(getAccountRateLimitKey("login", cleanEmail)))) {
+      return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 429 });
+    }
+
+    const { data: user, error } = await getSupabaseAdmin()
       .from("User")
       .select("id, email, passwordHash, name, emailVerified")
       .eq("email", cleanEmail)
       .maybeSingle();
 
     if (error || !user) {
-      return NextResponse.json({ error: "ไม่พบบัญชีอีเมลนี้ในระบบ (" + cleanEmail + ")" }, { status: 401 });
+      return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 401 });
     }
 
     // Compare clean password and original password
     const isMatch = (await comparePassword(cleanPassword, user.passwordHash)) || (await comparePassword(password, user.passwordHash));
     if (!isMatch) {
-      return NextResponse.json({ error: "รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง" }, { status: 401 });
-    }
-
-    // Check if email is verified
-    if (user.emailVerified === false) {
-      return NextResponse.json(
-        {
-          error: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ",
-          requiresVerification: true,
-          email: user.email,
-        },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 401 });
     }
 
     const token = signToken({ userId: user.id, email: user.email });
 
     const response = NextResponse.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, emailVerified: user.emailVerified === true },
     });
 
     response.cookies.set("token", token, {

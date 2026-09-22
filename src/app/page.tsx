@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -19,7 +19,12 @@ import {
   Sparkles,
   Search,
   Menu,
+  BarChart2,
+  Palette,
 } from "lucide-react";
+import VoiceDictationButton from "@/components/VoiceDictationButton";
+import ChartWizardModal from "@/components/ChartWizardModal";
+import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 
 export default function AppHome() {
@@ -49,8 +54,14 @@ export default function AppHome() {
 
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [notesPage, setNotesPage] = useState(0);
+  const [hasMoreNotes, setHasMoreNotes] = useState(false);
+  const [isLoadingMoreNotes, setIsLoadingMoreNotes] = useState(false);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<any | null>(null);
+  const activeNoteRef = useRef<any | null>(null);
+  const noteRevisionRef = useRef<Record<string, number>>({});
+  const noteWriteQueueRef = useRef<Record<string, Promise<unknown>>>({});
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   // Search state
@@ -61,6 +72,7 @@ export default function AppHome() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Share state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -75,6 +87,10 @@ export default function AppHome() {
 
   // Mobile Drawer State
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Chart Wizard & Color Picker state
+  const [isChartWizardOpen, setIsChartWizardOpen] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   // Check auth on mount
   useEffect(() => {
@@ -124,16 +140,88 @@ export default function AppHome() {
     }
   };
 
+  const rememberNoteRevisions = (incomingNotes: Array<{ id: string; revision?: number }> | undefined) => {
+    incomingNotes?.forEach((note) => {
+      if (Number.isInteger(note.revision)) {
+        noteRevisionRef.current[note.id] = note.revision as number;
+      }
+    });
+  };
+
   // Load notes (with search)
-  const loadNotes = async (q = searchQuery) => {
+  const loadNotes = async (q = searchQuery, page = 0, append = false) => {
+    if (append) setIsLoadingMoreNotes(true);
     try {
-      const url = q ? `/api/notes?q=${encodeURIComponent(q)}` : "/api/notes";
+      const params = new URLSearchParams({ page: String(page) });
+      if (q) params.set("q", q);
+      const url = `/api/notes?${params.toString()}`;
       const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to load notes (${res.status})`);
       const data = await res.json();
-      if (data.notes) setNotes(data.notes);
+      if (Array.isArray(data.notes)) {
+        rememberNoteRevisions(data.notes);
+        setNotes((previous) => (append ? [...previous, ...data.notes] : data.notes));
+        setNotesPage(Number.isInteger(data.page) ? data.page : page);
+        setHasMoreNotes(Boolean(data.hasMore));
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      if (append) setIsLoadingMoreNotes(false);
     }
+  };
+
+  const patchNote = async (
+    id: string,
+    patch: { title?: string; content?: string; folderId?: string | null },
+  ) => {
+    const previousWrite = noteWriteQueueRef.current[id] ?? Promise.resolve();
+    const operation = previousWrite.catch(() => undefined).then(async () => {
+      const currentRevision = noteRevisionRef.current[id]
+        ?? (id === activeNoteId && Number.isInteger(activeNote?.revision) ? activeNote.revision : undefined);
+      if (!Number.isInteger(currentRevision)) {
+        throw new Error("Note version is unavailable; reload the note before saving");
+      }
+
+      const res = await fetch(`/api/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...patch, revision: currentRevision }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.note) {
+        if (res.status === 409) {
+          setSaveError("โน้ตถูกแก้ไขจากที่อื่น กรุณาโหลดโน้ตใหม่ก่อนบันทึก");
+        }
+        throw new Error(data.error || `Failed to update note (${res.status})`);
+      }
+
+      noteRevisionRef.current[id] = data.note.revision;
+      setNotes((previous) => previous.map((note) => (
+        note.id === id
+          ? {
+              ...note,
+              title: data.note.title,
+              folderId: data.note.folderId,
+              revision: data.note.revision,
+              color: parseNoteTheme(data.note.content || "").color,
+            }
+          : note
+      )));
+      if (id === activeNoteId) {
+        activeNoteRef.current = data.note;
+        setActiveNote(data.note);
+      }
+      setSaveError(null);
+      return data.note;
+    });
+    const trackedOperation = operation.finally(() => {
+      if (noteWriteQueueRef.current[id] === trackedOperation) {
+        delete noteWriteQueueRef.current[id];
+      }
+    });
+    noteWriteQueueRef.current[id] = trackedOperation;
+    return trackedOperation;
   };
 
   useEffect(() => {
@@ -147,6 +235,7 @@ export default function AppHome() {
   useEffect(() => {
     if (!activeNoteId) {
       setActiveNote(null);
+      activeNoteRef.current = null;
       return;
     }
 
@@ -154,13 +243,20 @@ export default function AppHome() {
       .then((res) => res.json())
       .then((data) => {
         if (data.note) {
+          activeNoteRef.current = data.note;
+          noteRevisionRef.current[data.note.id] = data.note.revision;
           setActiveNote(data.note);
           setEditTitle(data.note.title);
           setEditContent(data.note.content);
           setIsShared(Boolean(data.note.isShared));
         }
-      });
+      })
+      .catch((err) => console.error("Failed to load note", err));
   }, [activeNoteId]);
+
+  useEffect(() => {
+    activeNoteRef.current = activeNote;
+  }, [activeNote]);
 
   // Handle Toggle Share
   const handleToggleShare = async (newSharedStatus: boolean) => {
@@ -174,7 +270,7 @@ export default function AppHome() {
       const data = await res.json();
       if (data.success) {
         setIsShared(newSharedStatus);
-        setActiveNote((prev: any) => ({ ...prev, isShared: newSharedStatus }));
+        setActiveNote((prev: any) => ({ ...prev, isShared: newSharedStatus, shareToken: data.note.shareToken }));
       }
     } catch (err) {
       console.error(err);
@@ -183,7 +279,8 @@ export default function AppHome() {
 
   const handleCopyLink = () => {
     if (typeof window === "undefined" || !activeNoteId) return;
-    const shareUrl = `${window.location.origin}/share/${activeNoteId}`;
+    if (!activeNote?.shareToken) return;
+    const shareUrl = `${window.location.origin}/share/${activeNote.shareToken}`;
     navigator.clipboard.writeText(shareUrl);
     setCopiedShareLink(true);
     setTimeout(() => setCopiedShareLink(false), 2000);
@@ -203,6 +300,7 @@ export default function AppHome() {
       });
       const data = await res.json();
       if (data.note) {
+        noteRevisionRef.current[data.note.id] = data.note.revision;
         await loadNotes();
         setActiveNoteId(data.note.id);
         setIsEditing(true);
@@ -216,23 +314,17 @@ export default function AppHome() {
   const handleSaveNote = async () => {
     if (!activeNoteId) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const res = await fetch(`/api/notes/${activeNoteId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editTitle,
-          content: editContent,
-        }),
+      await patchNote(activeNoteId, {
+        title: editTitle,
+        content: editContent,
       });
-      const data = await res.json();
-      if (data.note) {
-        setActiveNote(data.note);
-        setIsEditing(false);
-        loadNotes();
-      }
+      setIsEditing(false);
+      await loadNotes();
     } catch (err) {
       console.error(err);
+      setSaveError(err instanceof Error ? err.message : "บันทึกโน้ตไม่สำเร็จ");
     } finally {
       setIsSaving(false);
     }
@@ -249,6 +341,67 @@ export default function AppHome() {
       loadNotes();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Handle note theme color change
+  const handleSelectTheme = async (newColor: NoteColorKey) => {
+    if (!activeNoteId || !activeNote) return;
+    const currentNote = activeNoteRef.current || activeNote;
+    const sourceContent = isEditing ? editContent : currentNote.content || "";
+    const newContent = applyNoteTheme(sourceContent, newColor);
+    activeNoteRef.current = { ...currentNote, content: newContent };
+    setActiveNote((prev: any) => ({ ...prev, content: newContent }));
+    setEditContent(newContent);
+    setNotes((prevNotes) =>
+      prevNotes.map((n) => (n.id === activeNoteId ? { ...n, color: newColor } : n))
+    );
+    setIsColorPickerOpen(false);
+    try {
+      await patchNote(activeNoteId, { content: newContent });
+    } catch (err) {
+      console.error("Failed to update note theme", err);
+      setSaveError(err instanceof Error ? err.message : "เปลี่ยนสีโน้ตไม่สำเร็จ");
+    }
+  };
+
+  // Handle voice transcript insertion
+  const handleVoiceTranscript = async (text: string) => {
+    if (!activeNoteId || !activeNote) return;
+    if (isEditing) {
+      setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
+    } else {
+      const currentNote = activeNoteRef.current || activeNote;
+      const updatedContent = currentNote.content ? `${currentNote.content}\n\n${text}` : text;
+      activeNoteRef.current = { ...currentNote, content: updatedContent };
+      setActiveNote((prev: any) => ({ ...prev, content: updatedContent }));
+      setEditContent(updatedContent);
+      try {
+        await patchNote(activeNoteId, { content: updatedContent });
+      } catch (err) {
+        console.error("Failed to append voice transcript", err);
+        setSaveError(err instanceof Error ? err.message : "บันทึกเสียงไม่สำเร็จ");
+      }
+    }
+  };
+
+  // Handle chart insertion from wizard
+  const handleInsertChart = async (markdown: string) => {
+    if (!activeNoteId || !activeNote) return;
+    if (isEditing) {
+      setEditContent((prev) => `${prev}\n${markdown}\n`);
+    } else {
+      const currentNote = activeNoteRef.current || activeNote;
+      const updatedContent = `${currentNote.content || ""}\n${markdown}\n`;
+      activeNoteRef.current = { ...currentNote, content: updatedContent };
+      setActiveNote((prev: any) => ({ ...prev, content: updatedContent }));
+      setEditContent(updatedContent);
+      try {
+        await patchNote(activeNoteId, { content: updatedContent });
+      } catch (err) {
+        console.error("Failed to insert chart", err);
+        setSaveError(err instanceof Error ? err.message : "แทรกชาร์ตไม่สำเร็จ");
+      }
     }
   };
 
@@ -290,12 +443,8 @@ export default function AppHome() {
       setEditTitle(newTitle.trim());
     }
     try {
-      await fetch(`/api/notes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle.trim() }),
-      });
-      loadNotes();
+      await patchNote(id, { title: newTitle.trim() });
+      await loadNotes();
     } catch (err) {
       console.error("Failed to rename note:", err);
       loadNotes();
@@ -329,12 +478,8 @@ export default function AppHome() {
       prev.map((n) => (n.id === noteId ? { ...n, folderId: targetFolderId } : n))
     );
     try {
-      await fetch(`/api/notes/${noteId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folderId: targetFolderId }),
-      });
-      loadNotes();
+      await patchNote(noteId, { folderId: targetFolderId });
+      await loadNotes();
     } catch (err) {
       console.error("Failed to move note:", err);
       loadNotes();
@@ -414,6 +559,9 @@ export default function AppHome() {
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        hasMoreNotes={hasMoreNotes}
+        isLoadingMoreNotes={isLoadingMoreNotes}
+        onLoadMoreNotes={() => loadNotes(searchQuery, notesPage + 1, true)}
       />
 
       {/* Main Content Area */}
@@ -432,9 +580,21 @@ export default function AppHome() {
                   <Menu className="w-5 h-5" />
                 </button>
 
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-                  <FileText className="w-4 h-4" />
-                </div>
+                {(() => {
+                  const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
+                  const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
+                  return (
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
+                        activeColorKey !== "default"
+                          ? activeTheme.badgeBg
+                          : "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" />
+                    </div>
+                  );
+                })()}
                 <span className="font-semibold text-sm text-neutral-200 truncate">
                   {isEditing ? editTitle : activeNote.title}
                 </span>
@@ -446,7 +606,67 @@ export default function AppHome() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              {(() => {
+                const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
+                const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
+                return (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {saveError && (
+                      <span className="max-w-48 truncate text-[10px] text-rose-400" title={saveError}>
+                        {saveError}
+                      </span>
+                    )}
+                    {/* Voice Dictation Button */}
+                    <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
+
+                    {/* Chart Wizard Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsChartWizardOpen(true)}
+                      title={t.createChart}
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                    >
+                      <BarChart2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span className="hidden md:inline">{t.createChart}</span>
+                    </button>
+
+                    {/* Theme Color Picker */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
+                        title={t.noteColor}
+                        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                      >
+                        <Palette className="w-3.5 h-3.5 text-amber-400" />
+                        <span className={`w-2 h-2 rounded-full ${activeTheme.dotColor}`} />
+                      </button>
+
+                      {isColorPickerOpen && (
+                        <div className="absolute top-full mt-2 right-0 z-50 bg-neutral-900 border border-neutral-700/80 shadow-2xl rounded-xl p-2.5 flex items-center gap-2 animate-in fade-in zoom-in-95">
+                          {(Object.keys(NOTE_THEMES) as NoteColorKey[]).map((cKey) => {
+                            const themeOpt = NOTE_THEMES[cKey];
+                            return (
+                              <button
+                                key={cKey}
+                                type="button"
+                                onClick={() => handleSelectTheme(cKey)}
+                                title={themeOpt.label[lang] || themeOpt.label.en}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${themeOpt.dotColor} ${
+                                  activeColorKey === cKey
+                                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-900"
+                                    : ""
+                                }`}
+                              >
+                                {activeColorKey === cKey && (
+                                  <Check className="w-3 h-3 text-white stroke-[3]" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                 {isEditing ? (
                   <>
                     <button
@@ -466,6 +686,17 @@ export default function AppHome() {
                   </>
                 ) : (
                   <>
+                    {/* Find in Note Button */}
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent("nota:open-find"))}
+                      title={t.findInNote}
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span className="hidden md:inline">{t.findInNote.split("(")[0].trim()}</span>
+                      <kbd className="hidden lg:inline-block px-1 py-0.5 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">⌘F</kbd>
+                    </button>
+
                     {/* Share Button */}
                     <button
                       onClick={() => setIsShareModalOpen(true)}
@@ -502,11 +733,15 @@ export default function AppHome() {
                   </>
                 )}
               </div>
-            </div>
+            );
+          })()}
+        </div>
 
             {/* Note Body: Markdown Viewer OR Editor */}
             {isEditing ? (
-              <div className="flex-1 flex flex-col p-4 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto max-w-5xl mx-auto w-full">
+              <div className={`flex-1 flex flex-col p-4 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto max-w-5xl mx-auto w-full transition-colors duration-300 ${
+                NOTE_THEMES[parseNoteTheme(activeNote?.content || "").color]?.editorBg || "bg-neutral-950"
+              }`}>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     {t.noteTitleLabel}
@@ -537,13 +772,13 @@ export default function AppHome() {
                 lang={lang}
                 onUpdateContent={async (newContent) => {
                   if (!activeNoteId) return;
-                  setActiveNote((prev: any) => ({ ...prev, content: newContent }));
-                  setEditContent(newContent);
-                  await fetch(`/api/notes/${activeNoteId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ content: newContent }),
-                  });
+                  try {
+                    const updatedNote = await patchNote(activeNoteId, { content: newContent });
+                    setEditContent(updatedNote.content);
+                  } catch (err) {
+                    console.error("Failed to update note content", err);
+                    setSaveError(err instanceof Error ? err.message : "บันทึกเนื้อหาไม่สำเร็จ");
+                  }
                 }}
               />
             )}
@@ -652,7 +887,7 @@ export default function AppHome() {
                       readOnly
                       value={
                         typeof window !== "undefined"
-                          ? `${window.location.origin}/share/${activeNote.id}`
+                          ? `${window.location.origin}/share/${activeNote.shareToken}`
                           : ""
                       }
                       className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-300 font-mono select-all focus:outline-none"
@@ -714,6 +949,14 @@ export default function AppHome() {
           setIsSettingsOpen(false);
           router.push("/login");
         }}
+      />
+
+      {/* Visual Chart Wizard Modal */}
+      <ChartWizardModal
+        isOpen={isChartWizardOpen}
+        onClose={() => setIsChartWizardOpen(false)}
+        onInsertChart={handleInsertChart}
+        lang={lang}
       />
     </div>
   );
