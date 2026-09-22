@@ -138,7 +138,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
   }
 
   // Extract theme color and clean content without raw frontmatter
-  const { color, cleanContent } = useMemo(() => parseNoteTheme(content), [content]);
+  const { color, cleanContent, lineOffset } = useMemo(() => parseNoteTheme(content), [content]);
   const activeTheme = NOTE_THEMES[color] || NOTE_THEMES.default;
 
   // Reading time & word count statistics
@@ -173,12 +173,12 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
     });
 
     return headingList;
-  }, [content]);
+  }, [cleanContent]);
 
   // Handle Precise Checkbox Toggle by Exact Line Number in AST
   const handleToggleExactLine = (lineNumber: number) => {
     const lines = content.split("\n");
-    const targetIdx = lineNumber - 1;
+    const targetIdx = lineNumber - 1 + lineOffset;
 
     if (targetIdx >= 0 && targetIdx < lines.length) {
       lines[targetIdx] = lines[targetIdx].replace(

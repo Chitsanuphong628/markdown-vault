@@ -24,7 +24,7 @@ import {
   BarChart2,
   Mic,
 } from "lucide-react";
-import { parseNoteTheme, applyNoteTheme } from "@/lib/noteTheme";
+import { parseNoteTheme, applyNoteBodyChange } from "@/lib/noteTheme";
 import { Language } from "@/lib/i18n";
 
 interface RichNoteEditorProps {
@@ -60,10 +60,15 @@ export default function RichNoteEditor({
   const [slashIndex, setSlashIndex] = useState(0);
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const noteColorRef = useRef(noteColor);
+  const sourceContentRef = useRef(initialContent);
 
   useEffect(() => {
     noteColorRef.current = noteColor;
   }, [noteColor]);
+
+  useEffect(() => {
+    sourceContentRef.current = initialContent;
+  }, [initialContent]);
 
   const slashCommands: SlashCommand[] = useMemo(
     () => [
@@ -262,7 +267,8 @@ export default function RichNoteEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawMarkdown = (ed.storage as any).markdown?.getMarkdown?.() || "";
       const currentNoteColor = noteColorRef.current;
-      const withTheme = currentNoteColor !== "default" ? applyNoteTheme(rawMarkdown, currentNoteColor) : rawMarkdown;
+      const withTheme = applyNoteBodyChange(sourceContentRef.current, rawMarkdown, currentNoteColor);
+      sourceContentRef.current = withTheme;
       onChange(withTheme);
     },
   });

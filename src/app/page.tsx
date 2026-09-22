@@ -59,6 +59,7 @@ export default function AppHome() {
   const [notesPage, setNotesPage] = useState(0);
   const [hasMoreNotes, setHasMoreNotes] = useState(false);
   const [isLoadingMoreNotes, setIsLoadingMoreNotes] = useState(false);
+  const notesRequestIdRef = useRef(0);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<any | null>(null);
   const activeNoteRef = useRef<any | null>(null);
@@ -155,6 +156,8 @@ export default function AppHome() {
 
   // Load notes (with search)
   const loadNotes = async (q = searchQuery, page = 0, append = false) => {
+    const requestId = notesRequestIdRef.current + 1;
+    notesRequestIdRef.current = requestId;
     if (append) setIsLoadingMoreNotes(true);
     try {
       const params = new URLSearchParams({ page: String(page) });
@@ -163,6 +166,7 @@ export default function AppHome() {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Failed to load notes (${res.status})`);
       const data = await res.json();
+      if (requestId !== notesRequestIdRef.current) return;
       if (Array.isArray(data.notes)) {
         rememberNoteRevisions(data.notes);
         setNotes((previous) => (append ? [...previous, ...data.notes] : data.notes));
@@ -172,7 +176,7 @@ export default function AppHome() {
     } catch (err) {
       console.error(err);
     } finally {
-      if (append) setIsLoadingMoreNotes(false);
+      if (append && requestId === notesRequestIdRef.current) setIsLoadingMoreNotes(false);
     }
   };
 

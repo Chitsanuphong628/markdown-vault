@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
     const { data: user, error } = await getSupabaseAdmin()
       .from("User")
-      .select("id, email, passwordHash, name, emailVerified")
+      .select("id, email, passwordHash, name, emailVerified, sessionVersion")
       .eq("email", cleanEmail)
       .maybeSingle();
 
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "เข้าสู่ระบบไม่สำเร็จ" }, { status: 401 });
     }
 
-    const token = signToken({ userId: user.id, email: user.email });
+    const token = signToken({ userId: user.id, email: user.email, sessionVersion: user.sessionVersion });
 
     const response = NextResponse.json({
       success: true,

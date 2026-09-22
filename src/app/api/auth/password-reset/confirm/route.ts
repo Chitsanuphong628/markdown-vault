@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   }
   const supabase = getSupabaseAdmin();
   const { data: user } = await supabase.from("User")
-    .select("id, passwordResetCodeHash, passwordResetExpiresAt, passwordResetAttempts")
+    .select("id, passwordResetCodeHash, passwordResetExpiresAt, passwordResetAttempts, sessionVersion")
     .eq("email", cleanEmail).maybeSingle();
   const expired = !user?.passwordResetExpiresAt || new Date(user.passwordResetExpiresAt).getTime() < Date.now();
   const valid = Boolean(user) && !expired && (user.passwordResetAttempts ?? 0) < 5
@@ -50,9 +50,11 @@ export async function POST(req: Request) {
     passwordResetCodeHash: null,
     passwordResetExpiresAt: null,
     passwordResetAttempts: 0,
+    sessionVersion: user.sessionVersion + 1,
     updatedAt: new Date().toISOString(),
   }).eq("id", user.id)
     .eq("passwordResetCodeHash", user.passwordResetCodeHash)
+    .eq("sessionVersion", user.sessionVersion)
     .gt("passwordResetExpiresAt", new Date().toISOString())
     .lt("passwordResetAttempts", 5)
     .select("id")

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const supabaseAdmin = getSupabaseAdmin();
     const { data: user, error } = await supabaseAdmin
       .from("User")
-      .select("id, email, name, verificationCodeHash, verificationExpiresAt, verificationAttempts, emailVerified")
+      .select("id, email, name, verificationCodeHash, verificationExpiresAt, verificationAttempts, emailVerified, sessionVersion")
       .eq("email", cleanEmail)
       .maybeSingle();
 
@@ -66,9 +66,10 @@ export async function POST(req: Request) {
       .eq("id", user.id)
       .eq("emailVerified", false)
       .eq("verificationCodeHash", user.verificationCodeHash)
+      .eq("sessionVersion", user.sessionVersion)
       .gt("verificationExpiresAt", new Date().toISOString())
       .lt("verificationAttempts", 5)
-      .select("id")
+      .select("id, sessionVersion")
       .maybeSingle();
 
     if (updateError || !consumedUser) {
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
     }
 
     // Auto-login session upon successful verification
-    const authToken = signToken({ userId: user.id, email: user.email });
+    const authToken = signToken({ userId: user.id, email: user.email, sessionVersion: consumedUser.sessionVersion });
 
     const response = NextResponse.json({
       success: true,

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
-import { assertOwnedFolder, wouldCreateFolderCycle } from "@/lib/ownership";
 import { rejectCrossOrigin } from "@/lib/security";
 import { z } from "zod";
 
@@ -48,27 +47,25 @@ export async function PATCH(
     const parsed = folderPatchSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid folder update" }, { status: 400 });
     const { name, parentId } = parsed.data;
-    if (parentId !== undefined && !(await assertOwnedFolder(parentId, user.id))) {
-      return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });
+
+    const { data: folder, error } = await getSupabaseAdmin().rpc("update_nota_folder", {
+      target_folder_id: id,
+      target_user_id: user.id,
+      target_name: name ?? null,
+      name_provided: name !== undefined,
+      target_parent_id: parentId ?? null,
+      parent_provided: parentId !== undefined,
+    });
+
+    if (error) {
+      if (error.code === "P0002") return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+      if (error.code === "P0003") return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });
+      if (error.code === "P0001") return NextResponse.json({ error: "Folder cannot be its own ancestor" }, { status: 400 });
+      throw error;
     }
-    if (parentId !== undefined && await wouldCreateFolderCycle(id, parentId, user.id)) {
-      return NextResponse.json({ error: "Folder cannot be its own ancestor" }, { status: 400 });
-    }
 
-    const updateData: Record<string, string | null> = { updatedAt: new Date().toISOString() };
-    if (name !== undefined) updateData.name = name;
-    if (parentId !== undefined) updateData.parentId = parentId || null;
-
-    const { data: folder, error } = await getSupabaseAdmin()
-      .from("Folder")
-      .update(updateData)
-      .eq("id", id)
-      .eq("userId", user.id)
-      .select("*")
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({ folder });
+    if (!folder) return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+    return NextResponse.json({ folder: Array.isArray(folder) ? folder[0] : folder });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

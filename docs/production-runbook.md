@@ -3,7 +3,7 @@
 ## Before merge
 
 1. Create an encrypted Supabase backup and record row counts for `User`, `Folder`, and `Note`.
-2. Restore it into a non-production Supabase project, run the migration, then compare counts, owner references, and active-share counts.
+2. Restore it into a non-production Supabase project, run the migrations in filename order (`202609220000_initial_schema.sql` then `202609220001_public_production_hardening.sql`), then compare counts, owner references, and active-share counts. The baseline is idempotent for existing installations; never use it as permission to reset or drop a live database.
    Validate each `NOT VALID` foreign key in that restored project before production; any orphaned legacy row is a release blocker until repaired.
 3. Generate new, distinct `JWT_SECRET` and `AUTH_TOKEN_PEPPER`; revoke the tracked legacy JWT secret everywhere it may have been used.
 4. Add all values from `.env.example` as Vercel Production secrets. Verify the Vercel production domain in Resend and set `NEXT_PUBLIC_APP_URL` to that exact origin.

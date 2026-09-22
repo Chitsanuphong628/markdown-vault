@@ -78,61 +78,71 @@ export function isNoteColorKey(value: unknown): value is NoteColorKey {
   return typeof value === "string" && value in NOTE_THEMES;
 }
 
+const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const COLOR_FIELD_REGEX = /^[ \t]*color:[ \t]*["']?([a-zA-Z]+)["']?[ \t]*$/im;
+
+interface NoteFrontmatter {
+  body: string;
+  cleanContent: string;
+  lineOffset: number;
+}
+
+function readNoteFrontmatter(rawContent: string): NoteFrontmatter | null {
+  const match = rawContent.match(FRONTMATTER_REGEX);
+  if (!match) return null;
+
+  return {
+    body: match[1],
+    cleanContent: rawContent.slice(match[0].length),
+    lineOffset: (match[0].match(/\r?\n/g) || []).length,
+  };
+}
+
+function updateFrontmatterColor(frontmatterBody: string, newColor: NoteColorKey): string {
+  if (newColor === "default") {
+    return frontmatterBody.replace(COLOR_FIELD_REGEX, "").trim();
+  }
+
+  if (COLOR_FIELD_REGEX.test(frontmatterBody)) {
+    return frontmatterBody.replace(COLOR_FIELD_REGEX, `color: ${newColor}`).trim();
+  }
+
+  return `color: ${newColor}\n${frontmatterBody}`.trim();
+}
+
+function formatFrontmatter(frontmatterBody: string, cleanContent: string): string {
+  if (!frontmatterBody) return cleanContent;
+  return `---\n${frontmatterBody}\n---\n\n${cleanContent}`;
+}
+
 /**
  * Extracts note theme color and clean content without raw frontmatter
  */
-export function parseNoteTheme(rawContent: string): { color: NoteColorKey; cleanContent: string } {
-  if (!rawContent) return { color: "default", cleanContent: "" };
+export function parseNoteTheme(rawContent: string): { color: NoteColorKey; cleanContent: string; lineOffset: number } {
+  if (!rawContent) return { color: "default", cleanContent: "", lineOffset: 0 };
 
-  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-  const match = rawContent.match(frontmatterRegex);
-
-  if (!match) {
-    return { color: "default", cleanContent: rawContent };
+  const frontmatter = readNoteFrontmatter(rawContent);
+  if (!frontmatter) {
+    return { color: "default", cleanContent: rawContent, lineOffset: 0 };
   }
 
-  const frontmatterBody = match[1];
-  const cleanContent = rawContent.slice(match[0].length);
-
-  const colorMatch = frontmatterBody.match(/color:\s*["']?([a-zA-Z]+)["']?/);
+  const colorMatch = frontmatter.body.match(COLOR_FIELD_REGEX);
   const colorKey = colorMatch ? (colorMatch[1].toLowerCase() as NoteColorKey) : "default";
 
   if (colorKey in NOTE_THEMES) {
-    return { color: colorKey, cleanContent };
+    return { color: colorKey, cleanContent: frontmatter.cleanContent, lineOffset: frontmatter.lineOffset };
   }
 
-  return { color: "default", cleanContent };
+  return { color: "default", cleanContent: frontmatter.cleanContent, lineOffset: frontmatter.lineOffset };
 }
 
 /**
  * Applies or updates the theme color in frontmatter while preserving existing content
  */
 export function applyNoteTheme(rawContent: string, newColor: NoteColorKey): string {
-  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-  const match = rawContent.match(frontmatterRegex);
-
-  if (match) {
-    let frontmatterBody = match[1];
-    const cleanContent = rawContent.slice(match[0].length);
-
-    if (newColor === "default") {
-      // Remove color field
-      frontmatterBody = frontmatterBody
-        .replace(/color:\s*["']?[a-zA-Z]+["']?\r?\n?/, "")
-        .trim();
-      if (!frontmatterBody) {
-        return cleanContent;
-      }
-      return `---\n${frontmatterBody}\n---\n\n${cleanContent}`;
-    }
-
-    if (/color:\s*["']?[a-zA-Z]+["']?/.test(frontmatterBody)) {
-      frontmatterBody = frontmatterBody.replace(/color:\s*["']?[a-zA-Z]+["']?/, `color: ${newColor}`);
-    } else {
-      frontmatterBody = `color: ${newColor}\n${frontmatterBody}`;
-    }
-
-    return `---\n${frontmatterBody.trim()}\n---\n\n${cleanContent}`;
+  const frontmatter = readNoteFrontmatter(rawContent);
+  if (frontmatter) {
+    return formatFrontmatter(updateFrontmatterColor(frontmatter.body, newColor), frontmatter.cleanContent);
   }
 
   if (newColor === "default") {
@@ -140,4 +150,20 @@ export function applyNoteTheme(rawContent: string, newColor: NoteColorKey): stri
   }
 
   return `---\ncolor: ${newColor}\n---\n\n${rawContent}`;
+}
+
+/**
+ * Replaces the editable body while retaining every non-theme frontmatter field.
+ * Visual editors receive the body without YAML metadata, so applying the theme
+ * to the editor output alone would otherwise discard titles, tags, and dates.
+ */
+export function applyNoteBodyChange(
+  originalContent: string,
+  cleanContent: string,
+  newColor: NoteColorKey,
+): string {
+  const frontmatter = readNoteFrontmatter(originalContent);
+  if (!frontmatter) return applyNoteTheme(cleanContent, newColor);
+
+  return formatFrontmatter(updateFrontmatterColor(frontmatter.body, newColor), cleanContent);
 }

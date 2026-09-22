@@ -12,6 +12,7 @@ const SESSION_AUDIENCE = "nota-web";
 export interface TokenPayload {
   userId: string;
   email: string;
+  sessionVersion: number;
 }
 
 export function signToken(payload: TokenPayload): string {
@@ -24,10 +25,27 @@ export function signToken(payload: TokenPayload): string {
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, getWebJwtSecret(), {
+    const decoded = jwt.verify(token, getWebJwtSecret(), {
       issuer: SESSION_ISSUER,
       audience: SESSION_AUDIENCE,
-    }) as TokenPayload;
+    }) as Partial<TokenPayload>;
+    const sessionVersion = decoded.sessionVersion;
+
+    if (
+      typeof decoded.userId !== "string" ||
+      typeof decoded.email !== "string" ||
+      typeof sessionVersion !== "number" ||
+      !Number.isInteger(sessionVersion) ||
+      sessionVersion < 0
+    ) {
+      return null;
+    }
+
+    return {
+      userId: decoded.userId,
+      email: decoded.email,
+      sessionVersion,
+    };
   } catch {
     return null;
   }
@@ -66,11 +84,16 @@ export async function getSessionUser() {
 
   const { data: user, error } = await getSupabaseAdmin()
     .from("User")
-    .select("id, email, name, emailVerified")
+    .select("id, email, name, emailVerified, sessionVersion")
     .eq("id", payload.userId)
     .single();
 
-  if (error || !user) return null;
+  if (error || !user || user.sessionVersion !== payload.sessionVersion) return null;
 
-  return user;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    emailVerified: user.emailVerified,
+  };
 }

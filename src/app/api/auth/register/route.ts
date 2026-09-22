@@ -65,7 +65,25 @@ export async function POST(req: Request) {
       throw new Error(error?.message || "Failed to create user");
     }
 
-    await sendVerificationCode(user.email, verificationCode);
+    try {
+      await sendVerificationCode(user.email, verificationCode);
+    } catch (error) {
+      // The account and its one-time code are already durable. Keep the
+      // registration retryable through the verification page instead of
+      // making the user collide with the email-unique constraint on retry.
+      console.error("Verification email delivery failed after registration:", error);
+      return NextResponse.json(
+        {
+          success: true,
+          message: "สร้างบัญชีแล้ว แต่ยังส่งอีเมลไม่สำเร็จ กรุณาขอรหัสใหม่",
+          requiresVerification: true,
+          deliveryPending: true,
+          email: user.email,
+        },
+        { status: 202 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,

@@ -6,6 +6,8 @@ begin;
 create extension if not exists pgcrypto;
 
 alter table "User"
+  add column if not exists "emailVerified" boolean not null default false,
+  add column if not exists "sessionVersion" integer not null default 0,
   add column if not exists "verificationCodeHash" text,
   add column if not exists "verificationExpiresAt" timestamptz,
   add column if not exists "verificationAttempts" integer not null default 0,
@@ -15,12 +17,25 @@ alter table "User"
 
 -- Legacy demo credentials must not remain usable once production auth ships.
 do $$ begin
-  if exists (select 1 from information_schema.columns where table_name = 'User' and column_name = 'verificationOtp') then
+  if exists (
+    select 1 from information_schema.columns where table_name = 'User' and column_name = 'verificationOtp'
+  ) and exists (
+    select 1 from information_schema.columns where table_name = 'User' and column_name = 'verificationToken'
+  ) then
     update "User" set "verificationOtp" = null, "verificationToken" = null;
+  elsif exists (
+    select 1 from information_schema.columns where table_name = 'User' and column_name = 'verificationOtp'
+  ) then
+    update "User" set "verificationOtp" = null;
+  elsif exists (
+    select 1 from information_schema.columns where table_name = 'User' and column_name = 'verificationToken'
+  ) then
+    update "User" set "verificationToken" = null;
   end if;
 end $$;
 
 alter table "Note"
+  add column if not exists "isShared" boolean not null default false,
   add column if not exists "shareToken" text,
   add column if not exists "legacyShareId" text,
   add column if not exists "revision" integer not null default 0,
@@ -64,15 +79,121 @@ revoke all on table "User", "Folder", "Note" from anon, authenticated;
 -- Defend the service-role API with relational integrity. Existing installations
 -- may already have equivalent constraints, so add them only when absent.
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'Folder_parentId_fkey') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'Folder_parentId_fkey'
+      and conrelid = '"Folder"'::regclass
+      and confrelid = '"Folder"'::regclass
+  ) then
     alter table "Folder" add constraint "Folder_parentId_fkey"
       foreign key ("parentId") references "Folder"("id") on delete cascade not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'Note_folderId_fkey') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'Note_folderId_fkey'
+      and conrelid = '"Note"'::regclass
+      and confrelid = '"Folder"'::regclass
+  ) then
     alter table "Note" add constraint "Note_folderId_fkey"
       foreign key ("folderId") references "Folder"("id") on delete set null not valid;
   end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = '"Folder"'::regclass
+      and confrelid = '"User"'::regclass
+      and contype = 'f'
+  ) then
+    alter table "Folder" add constraint "Folder_userId_fkey"
+      foreign key ("userId") references "User"("id") on delete cascade not valid;
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = '"Note"'::regclass
+      and confrelid = '"User"'::regclass
+      and contype = 'f'
+  ) then
+    alter table "Note" add constraint "Note_userId_fkey"
+      foreign key ("userId") references "User"("id") on delete cascade not valid;
+  end if;
 end $$;
+
+-- Folder moves must check ownership, ancestry, and the update under one
+-- transaction. The per-user advisory lock makes A -> B and B -> A concurrent
+-- moves serialize instead of creating a cycle between two successful checks.
+create or replace function public.update_nota_folder(
+  target_folder_id text,
+  target_user_id text,
+  target_name text,
+  name_provided boolean,
+  target_parent_id text,
+  parent_provided boolean
+)
+returns "Folder"
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  folder_row "Folder"%rowtype;
+  next_parent text;
+  has_cycle boolean;
+begin
+  perform pg_advisory_xact_lock(hashtext(target_user_id));
+
+  select * into folder_row
+  from "Folder"
+  where "id" = target_folder_id and "userId" = target_user_id
+  for update;
+
+  if not found then
+    raise exception 'FOLDER_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  next_parent := case
+    when parent_provided then target_parent_id
+    else folder_row."parentId"
+  end;
+
+  if next_parent is not null then
+    if not exists (
+      select 1 from "Folder"
+      where "id" = next_parent and "userId" = target_user_id
+    ) then
+      raise exception 'FOLDER_PARENT_NOT_FOUND' using errcode = 'P0003';
+    end if;
+
+    if next_parent = target_folder_id then
+      raise exception 'FOLDER_CYCLE' using errcode = 'P0001';
+    end if;
+
+    with recursive ancestors(id) as (
+      select next_parent
+      union
+      select f."parentId"
+      from "Folder" f
+      join ancestors a on a.id = f."id"
+      where f."userId" = target_user_id and f."parentId" is not null
+    )
+    select exists (select 1 from ancestors where id = target_folder_id)
+      into has_cycle;
+
+    if has_cycle then
+      raise exception 'FOLDER_CYCLE' using errcode = 'P0001';
+    end if;
+  end if;
+
+  update "Folder"
+  set "name" = case when name_provided then target_name else folder_row."name" end,
+      "parentId" = next_parent,
+      "updatedAt" = now()
+  where "id" = target_folder_id and "userId" = target_user_id
+  returning * into folder_row;
+
+  return folder_row;
+end;
+$$;
+revoke all on function public.update_nota_folder(text, text, text, boolean, text, boolean) from public, anon, authenticated;
+grant execute on function public.update_nota_folder(text, text, text, boolean, text, boolean) to service_role;
 
 -- A single Postgres function makes account deletion atomic. It is called only
 -- by the server-side service-role client, never exposed to anon/authenticated.
