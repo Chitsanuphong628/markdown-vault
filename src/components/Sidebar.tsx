@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import {
   Folder as FolderIcon,
@@ -20,6 +20,7 @@ import {
 
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { NoteColorKey, NOTE_THEMES } from "@/lib/noteTheme";
+import { getShortcuts, formatComboDisplay } from "@/lib/shortcuts";
 
 export interface FolderItem {
   id: string;
@@ -105,6 +106,14 @@ export default function Sidebar({
   const [renamingType, setRenamingType] = useState<"note" | "folder" | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [shortcuts, setShortcuts] = useState(() => getShortcuts());
+
+  useEffect(() => {
+    const handleSync = () => setShortcuts(getShortcuts());
+    window.addEventListener("nota:shortcuts-changed", handleSync);
+    return () => window.removeEventListener("nota:shortcuts-changed", handleSync);
+  }, []);
 
   useEffect(() => {
     if (renamingId && renameInputRef.current) {
@@ -209,9 +218,26 @@ export default function Sidebar({
     }
   };
 
-  // Group notes into folder
-  const rootNotes = notes.filter((n) => !n.folderId);
-  const getNotesInFolder = (folderId: string) => notes.filter((n) => n.folderId === folderId);
+  // Optimized pre-grouping into O(1) Map lookup (replaces O(Folders * Notes) filtering)
+  const { notesByFolder, rootNotes } = useMemo(() => {
+    const map: Record<string, NoteItem[]> = {};
+    const root: NoteItem[] = [];
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i];
+      if (!n.folderId) {
+        root.push(n);
+      } else {
+        if (!map[n.folderId]) map[n.folderId] = [];
+        map[n.folderId].push(n);
+      }
+    }
+    return { notesByFolder: map, rootNotes: root };
+  }, [notes]);
+
+  const getNotesInFolder = useCallback(
+    (folderId: string) => notesByFolder[folderId] || [],
+    [notesByFolder]
+  );
 
   return (
     <>
@@ -254,7 +280,7 @@ export default function Sidebar({
             {onOpenSettings && (
               <button
                 onClick={onOpenSettings}
-                title="Settings & Integrations (⌘,)"
+                title={`${t.settingsTitle} (${formatComboDisplay(shortcuts.settings)})`}
                 className="p-1.5 text-neutral-400 hover:text-indigo-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
               >
                 <Settings className="w-4 h-4" />
@@ -280,11 +306,14 @@ export default function Sidebar({
             <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2" />
             <input
               type="text"
-              placeholder={t.searchPlaceholder}
+              placeholder={lang === "th" ? "ค้นหาโน้ตหรือเนื้อหา..." : "Search notes or content..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/20 transition-all"
+              className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-7 pr-12 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/20 transition-all"
             />
+            <kbd className="hidden sm:inline-block absolute right-2 top-2 px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none pointer-events-none">
+              {formatComboDisplay(shortcuts.search)}
+            </kbd>
           </div>
           <div className="flex items-center gap-0.5 shrink-0 bg-neutral-950/40 p-0.5 rounded-lg border border-neutral-800/80">
             <button

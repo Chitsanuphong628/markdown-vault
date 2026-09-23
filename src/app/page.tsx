@@ -1,11 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import DropzoneModal from "@/components/DropzoneModal";
-import SettingsModal from "@/components/SettingsModal";
 import {
   FileText,
   UploadCloud,
@@ -24,10 +23,23 @@ import {
   Code,
 } from "lucide-react";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
-import ChartWizardModal from "@/components/ChartWizardModal";
-import RichNoteEditor from "@/components/RichNoteEditor";
 import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
+import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
+
+// Dynamically load heavy components only when opened or required
+const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
+const SettingsModal = dynamic(() => import("@/components/SettingsModal"), { ssr: false });
+const ChartWizardModal = dynamic(() => import("@/components/ChartWizardModal"), { ssr: false });
+const RichNoteEditor = dynamic(() => import("@/components/RichNoteEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 text-neutral-400 text-xs gap-2">
+      <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <span>Loading editor...</span>
+    </div>
+  ),
+});
 
 export default function AppHome() {
   const router = useRouter();
@@ -98,6 +110,15 @@ export default function AppHome() {
   // Editor mode state (Visual WYSIWYG vs Raw Markdown)
   const [editorMode, setEditorMode] = useState<"visual" | "markdown">("visual");
 
+  // Keyboard shortcuts state
+  const [shortcuts, setShortcuts] = useState(() => getShortcuts());
+
+  useEffect(() => {
+    const handleSync = () => setShortcuts(getShortcuts());
+    window.addEventListener("nota:shortcuts-changed", handleSync);
+    return () => window.removeEventListener("nota:shortcuts-changed", handleSync);
+  }, []);
+
   // Check auth on mount
   useEffect(() => {
     fetch("/api/auth/me")
@@ -107,8 +128,7 @@ export default function AppHome() {
       })
       .then((data) => {
         setUser(data.user);
-        loadFolders();
-        loadNotes();
+        Promise.all([loadFolders(), loadNotes()]);
       })
       .catch(() => {
         router.push("/login");
@@ -117,23 +137,6 @@ export default function AppHome() {
         setLoading(false);
       });
   }, [router]);
-
-  // Global Keyboard shortcuts (Cmd/Ctrl + K for search, Cmd/Ctrl + , for settings)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        const searchInput = document.querySelector('input[type="text"][placeholder*="Search"], input[type="text"][placeholder*="ค้นหา"]') as HTMLInputElement;
-        if (searchInput) searchInput.focus();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
-        e.preventDefault();
-        setIsSettingsOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // Load folders
   const loadFolders = async () => {
@@ -233,7 +236,13 @@ export default function AppHome() {
     return trackedOperation;
   };
 
+  const isInitialSearchMountRef = useRef(true);
+
   useEffect(() => {
+    if (isInitialSearchMountRef.current) {
+      isInitialSearchMountRef.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       loadNotes(searchQuery);
     }, 250);
@@ -338,6 +347,59 @@ export default function AppHome() {
       setIsSaving(false);
     }
   };
+
+  // Global Keyboard shortcuts with custom mappings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInputFocused =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.getAttribute("contenteditable") === "true");
+
+      // 1. Search Vault
+      if (matchesShortcut(e, shortcuts.search)) {
+        e.preventDefault();
+        const searchInput = document.querySelector(
+          'input[type="text"][placeholder*="Search"], input[type="text"][placeholder*="ค้นหา"]'
+        ) as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+        return;
+      }
+
+      // 2. Open Settings
+      if (matchesShortcut(e, shortcuts.settings)) {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
+        return;
+      }
+
+      // 3. New Note
+      if (matchesShortcut(e, shortcuts.newNote) && !isInputFocused) {
+        e.preventDefault();
+        handleCreateNote(selectedFolderId);
+        return;
+      }
+
+      // 4. Toggle Edit/View
+      if (matchesShortcut(e, shortcuts.toggleEdit) && activeNote && !isInputFocused) {
+        e.preventDefault();
+        setIsEditing((prev) => !prev);
+        return;
+      }
+
+      // 5. Save Note
+      if (matchesShortcut(e, shortcuts.saveNote) && isEditing) {
+        e.preventDefault();
+        handleSaveNote();
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [shortcuts, selectedFolderId, activeNote, isEditing, editTitle, editContent]);
 
   // Handle Delete Note
   const handleDeleteNote = async (id: string) => {
@@ -520,6 +582,9 @@ export default function AppHome() {
     router.push("/login");
   };
 
+  const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
+  const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
+
   if (loading || !user) {
     return (
       <div className="h-screen w-screen bg-neutral-950 flex items-center justify-center text-neutral-400">
@@ -589,21 +654,15 @@ export default function AppHome() {
                   <Menu className="w-5 h-5" />
                 </button>
 
-                {(() => {
-                  const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
-                  const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
-                  return (
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                        activeColorKey !== "default"
-                          ? activeTheme.badgeBg
-                          : "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
-                      }`}
-                    >
-                      <FileText className="w-4 h-4" />
-                    </div>
-                  );
-                })()}
+                <div
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
+                    activeColorKey !== "default"
+                      ? activeTheme.badgeBg
+                      : "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                </div>
                 <span className="font-semibold text-sm text-neutral-200 truncate">
                   {isEditing ? editTitle : activeNote.title}
                 </span>
@@ -615,20 +674,19 @@ export default function AppHome() {
                 )}
               </div>
 
-              {(() => {
-                const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
-                const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
-                return (
-                  <div className="flex items-center gap-2 shrink-0">
-                    {saveError && (
-                      <span className="max-w-48 truncate text-[10px] text-rose-400" title={saveError}>
-                        {saveError}
-                      </span>
-                    )}
-                    {/* Voice Dictation Button */}
-                    <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
+              <div className="flex items-center gap-1.5 shrink-0">
+                {saveError && (
+                  <span className="max-w-44 truncate text-[10px] text-rose-400" title={saveError}>
+                    {saveError}
+                  </span>
+                )}
 
-                    {/* Chart Wizard Button */}
+                {/* Voice Dictation Button (Always available with ⌥Space / ⌘J) */}
+                <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
+
+                {isEditing ? (
+                  <>
+                    {/* Chart Wizard Button (Editing mode) */}
                     <button
                       type="button"
                       onClick={() => setIsChartWizardOpen(true)}
@@ -636,7 +694,7 @@ export default function AppHome() {
                       className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
                       <BarChart2 className="w-3.5 h-3.5 text-indigo-400" />
-                      <span className="hidden md:inline">{t.createChart}</span>
+                      <span className="hidden sm:inline">{t.createChart}</span>
                     </button>
 
                     {/* Theme Color Picker */}
@@ -676,8 +734,10 @@ export default function AppHome() {
                         </div>
                       )}
                     </div>
-                {isEditing ? (
-                  <>
+
+                    <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
+
+                    {/* Cancel & Save */}
                     <button
                       onClick={() => setIsEditing(false)}
                       className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
@@ -687,23 +747,66 @@ export default function AppHome() {
                     <button
                       onClick={handleSaveNote}
                       disabled={isSaving}
+                      title={`${t.saveNote} (${formatComboDisplay(shortcuts.saveNote)})`}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all shadow-sm hover:shadow-indigo-500/20 cursor-pointer"
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>{isSaving ? t.saving : t.saveNote}</span>
+                      <kbd className="hidden sm:inline-block px-1 py-0.2 bg-indigo-950/60 border border-indigo-400/30 rounded text-[10px] text-indigo-200 font-mono leading-none">
+                        {formatComboDisplay(shortcuts.saveNote)}
+                      </kbd>
                     </button>
                   </>
                 ) : (
                   <>
+                    {/* Theme Color Picker */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
+                        title={t.noteColor}
+                        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                      >
+                        <Palette className="w-3.5 h-3.5 text-amber-400" />
+                        <span className={`w-2 h-2 rounded-full ${activeTheme.dotColor}`} />
+                      </button>
+
+                      {isColorPickerOpen && (
+                        <div className="absolute top-full mt-2 right-0 z-50 bg-neutral-900 border border-neutral-700/80 shadow-2xl rounded-xl p-2.5 flex items-center gap-2 animate-in fade-in zoom-in-95">
+                          {(Object.keys(NOTE_THEMES) as NoteColorKey[]).map((cKey) => {
+                            const themeOpt = NOTE_THEMES[cKey];
+                            return (
+                              <button
+                                key={cKey}
+                                type="button"
+                                onClick={() => handleSelectTheme(cKey)}
+                                title={themeOpt.label[lang] || themeOpt.label.en}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${themeOpt.dotColor} ${
+                                  activeColorKey === cKey
+                                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-900"
+                                    : ""
+                                }`}
+                              >
+                                {activeColorKey === cKey && (
+                                  <Check className="w-3 h-3 text-white stroke-[3]" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Find in Note Button */}
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent("nota:open-find"))}
-                      title={t.findInNote}
+                      title={`${t.findInNote} (${formatComboDisplay(shortcuts.findInNote)})`}
                       className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
                       <Search className="w-3.5 h-3.5" />
-                      <span className="hidden md:inline">{t.findInNote.split("(")[0].trim()}</span>
-                      <kbd className="hidden lg:inline-block px-1 py-0.5 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">⌘F</kbd>
+                      <kbd className="hidden sm:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
+                        {formatComboDisplay(shortcuts.findInNote)}
+                      </kbd>
                     </button>
 
                     {/* Share Button */}
@@ -720,14 +823,22 @@ export default function AppHome() {
                       <span className="hidden sm:inline">{t.shareNote}</span>
                     </button>
 
+                    <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
+
+                    {/* Edit Button */}
                     <button
                       onClick={() => setIsEditing(true)}
-                      title={t.editNote}
-                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                      title={`${t.editNote} (${formatComboDisplay(shortcuts.toggleEdit)})`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
                       <span className="hidden sm:inline">{t.editNote}</span>
+                      <kbd className="hidden md:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
+                        {formatComboDisplay(shortcuts.toggleEdit)}
+                      </kbd>
                     </button>
+
+                    {/* Delete Button */}
                     <button
                       onClick={() => {
                         if (confirm(t.deleteNoteConfirm(activeNote.title))) {
@@ -742,9 +853,7 @@ export default function AppHome() {
                   </>
                 )}
               </div>
-            );
-          })()}
-        </div>
+            </div>
 
             {/* Note Body: Markdown Viewer OR Editor */}
             {isEditing ? (

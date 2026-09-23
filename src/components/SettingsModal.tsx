@@ -13,9 +13,20 @@ import {
   Database,
   LogOut,
   Key,
+  Keyboard,
+  RotateCcw,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Language, I18N_MAIN } from "@/lib/i18n";
+import {
+  DEFAULT_SHORTCUTS,
+  ShortcutActionId,
+  getShortcuts,
+  saveShortcut,
+  resetShortcuts,
+  formatComboDisplay,
+  eventToKeyCombo,
+} from "@/lib/shortcuts";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -60,9 +71,14 @@ export default function SettingsModal({
   setLang,
 }: SettingsModalProps) {
   const t = I18N_MAIN[lang] || I18N_MAIN.en;
-  const [activeTab, setActiveTab] = useState<"general" | "account" | "data" | "mcp">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "shortcuts" | "account" | "data" | "mcp">("general");
   const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
+
+  // Keyboard shortcuts state
+  const [shortcuts, setShortcuts] = useState<Record<ShortcutActionId, string>>(() => getShortcuts());
+  const [recordingActionId, setRecordingActionId] = useState<ShortcutActionId | null>(null);
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
 
   // Export state & queue
   const [isExporting, setIsExporting] = useState(false);
@@ -285,17 +301,69 @@ export default function SettingsModal({
     }
   };
 
-  // Close on Escape key
+  // Synchronize shortcuts from storage on open or custom event
+  useEffect(() => {
+    const handleSync = () => setShortcuts(getShortcuts());
+    window.addEventListener("nota:shortcuts-changed", handleSync);
+    return () => window.removeEventListener("nota:shortcuts-changed", handleSync);
+  }, []);
+
+  // Listen for key recording when customizing a shortcut
+  useEffect(() => {
+    if (!isOpen || !recordingActionId) return;
+
+    const handleRecordKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingActionId(null);
+        setConflictWarning(null);
+        return;
+      }
+
+      const combo = eventToKeyCombo(e);
+      if (!combo) return; // User pressed only modifier key (e.g. Cmd alone)
+
+      // Conflict detection
+      const conflictingId = (Object.keys(shortcuts) as ShortcutActionId[]).find(
+        (id) => id !== recordingActionId && shortcuts[id] === combo
+      );
+
+      if (conflictingId) {
+        const meta = DEFAULT_SHORTCUTS[conflictingId];
+        const actionLabel = meta.label[lang] || meta.label.en;
+        setConflictWarning(`${t.shortcutsConflict} "${actionLabel}"`);
+      } else {
+        setConflictWarning(null);
+      }
+
+      saveShortcut(recordingActionId, combo);
+      setShortcuts(getShortcuts());
+      setRecordingActionId(null);
+    };
+
+    window.addEventListener("keydown", handleRecordKey, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleRecordKey, { capture: true });
+    };
+  }, [isOpen, recordingActionId, shortcuts, lang, t]);
+
+  // Close on Escape key (only when NOT recording a shortcut)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (recordingActionId) {
+          // Handled by key recorder
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, recordingActionId]);
 
   if (!isOpen) return null;
 
@@ -370,6 +438,19 @@ export default function SettingsModal({
             >
               <Globe className="w-4 h-4 text-neutral-400 shrink-0" />
               <span>{t.tabGeneral}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("shortcuts")}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer outline-none text-left w-max shrink-0 whitespace-nowrap sm:w-full ${
+                activeTab === "shortcuts"
+                  ? "bg-neutral-800 text-white"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+              }`}
+            >
+              <Keyboard className="w-4 h-4 text-neutral-400 shrink-0" />
+              <span>{t.tabShortcuts}</span>
             </button>
 
             <button
@@ -458,6 +539,113 @@ export default function SettingsModal({
                       ภาษาไทย
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "shortcuts" && (
+              <div className="space-y-6 max-w-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-neutral-100 mb-1">
+                      {t.shortcutsTitle}
+                    </h3>
+                    <p className="text-sm text-neutral-400 leading-relaxed">
+                      {t.shortcutsDesc}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetShortcuts();
+                      setShortcuts(getShortcuts());
+                      setConflictWarning(null);
+                      setRecordingActionId(null);
+                    }}
+                    className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded-lg text-xs font-medium border border-neutral-700/60 transition-colors cursor-pointer shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{t.shortcutsResetBtn}</span>
+                  </button>
+                </div>
+
+                {conflictWarning && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-center justify-between animate-in fade-in">
+                    <span>{conflictWarning}</span>
+                    <button
+                      type="button"
+                      onClick={() => setConflictWarning(null)}
+                      className="text-amber-400 hover:text-amber-200 font-semibold ml-2 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                <div className="bg-neutral-950/40 border border-neutral-800 rounded-xl divide-y divide-neutral-800/80 overflow-hidden">
+                  {(Object.keys(DEFAULT_SHORTCUTS) as ShortcutActionId[]).map((actionId) => {
+                    const meta = DEFAULT_SHORTCUTS[actionId];
+                    const isRecording = recordingActionId === actionId;
+                    const currentCombo = shortcuts[actionId] || meta.defaultKey;
+                    const displayCombo = formatComboDisplay(currentCombo);
+
+                    return (
+                      <div
+                        key={actionId}
+                        className={`p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-colors ${
+                          isRecording ? "bg-indigo-950/20" : "hover:bg-neutral-900/40"
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="text-sm font-medium text-neutral-200">
+                            {meta.label[lang] || meta.label.en}
+                          </div>
+                          <div className="text-xs text-neutral-400">
+                            {meta.desc[lang] || meta.desc.en}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+                          {isRecording ? (
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/20 border border-indigo-500/50 rounded-lg text-xs font-mono text-indigo-300 animate-pulse">
+                                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                                {t.shortcutsRecording}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setRecordingActionId(null)}
+                                className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
+                              >
+                                {t.shortcutsCancelRecord}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <kbd className="px-2.5 py-1 bg-neutral-900 border border-neutral-700/80 rounded-lg text-xs font-mono font-medium text-neutral-200 shadow-xs min-w-[50px] text-center tracking-wide">
+                                {displayCombo}
+                              </kbd>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConflictWarning(null);
+                                  setRecordingActionId(actionId);
+                                }}
+                                className="px-2.5 py-1 bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700/50 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                              >
+                                {t.shortcutsChangeBtn}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 px-1">
+                  <span className="inline-block w-1 h-1 rounded-full bg-neutral-600" />
+                  <span>{t.shortcutsModifierHint}</span>
                 </div>
               </div>
             )}

@@ -1,12 +1,26 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeSlug from "rehype-slug";
 import rehypeKatex from "rehype-katex";
-import hljs from "highlight.js";
+import hljs from "highlight.js/lib/core";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import python from "highlight.js/lib/languages/python";
+import bash from "highlight.js/lib/languages/bash";
+import json from "highlight.js/lib/languages/json";
+import xml from "highlight.js/lib/languages/xml";
+import css from "highlight.js/lib/languages/css";
+import markdown from "highlight.js/lib/languages/markdown";
+import sql from "highlight.js/lib/languages/sql";
+import yaml from "highlight.js/lib/languages/yaml";
+import rust from "highlight.js/lib/languages/rust";
+import go from "highlight.js/lib/languages/go";
+import cpp from "highlight.js/lib/languages/cpp";
 import "highlight.js/styles/atom-one-dark.css";
 import {
   Check,
@@ -21,9 +35,48 @@ import {
   X,
 } from "lucide-react";
 import TableOfContents, { HeadingItem } from "./TableOfContents";
-import MermaidChart from "./MermaidChart";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { parseNoteTheme, NOTE_THEMES } from "@/lib/noteTheme";
+import { getShortcuts, matchesShortcut, formatComboDisplay } from "@/lib/shortcuts";
+
+// Register core languages for high performance & minimal bundle size
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("js", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("ts", typescript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("py", python);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("sh", bash);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("md", markdown);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("yml", yaml);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("rs", rust);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("cpp", cpp);
+hljs.registerLanguage("c", cpp);
+
+// Hoist plugins to avoid recreating arrays and recompiling pipeline on every render
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS = [rehypeSlug, rehypeKatex];
+
+// Lazy-load MermaidChart so the massive ~1.5MB mermaid bundle is only fetched when a diagram exists
+const MermaidChart = dynamic(() => import("./MermaidChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-44 my-4 flex flex-col items-center justify-center bg-neutral-900/60 rounded-xl border border-neutral-800 animate-pulse text-xs text-neutral-400 gap-2">
+      <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <span>Loading diagram...</span>
+    </div>
+  ),
+});
 
 interface MarkdownViewerProps {
   note: {
@@ -176,7 +229,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
   }, [cleanContent]);
 
   // Handle Precise Checkbox Toggle by Exact Line Number in AST
-  const handleToggleExactLine = (lineNumber: number) => {
+  const handleToggleExactLine = useCallback((lineNumber: number) => {
     const lines = content.split("\n");
     const targetIdx = lineNumber - 1 + lineOffset;
 
@@ -196,7 +249,82 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
     if (onUpdateContent) {
       onUpdateContent(updated);
     }
-  };
+  }, [content, lineOffset, onUpdateContent]);
+
+  // Memoized custom Markdown components
+  const markdownComponents = useMemo(
+    () => ({
+      code: CodeBlock,
+      li: ({
+        node,
+        children,
+        className,
+        ...props
+      }: React.LiHTMLAttributes<HTMLLIElement> & {
+        node?: { position?: { start?: { line?: number } } };
+      }) => {
+        const isTaskItem = className?.includes("task-list-item");
+        const lineNumber = node?.position?.start?.line;
+
+        if (isTaskItem && lineNumber) {
+          const modifiedChildren = React.Children.map(children, (child) => {
+            if (
+              React.isValidElement(child) &&
+              typeof child.props === "object" &&
+              child.props !== null &&
+              "type" in child.props &&
+              (child.props as { type: string }).type === "checkbox"
+            ) {
+              const childProps = child.props as { checked?: boolean };
+              return (
+                <input
+                  type="checkbox"
+                  checked={Boolean(childProps.checked)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleToggleExactLine(lineNumber);
+                  }}
+                  className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto shrink-0"
+                />
+              );
+            }
+            return child;
+          });
+
+          return (
+            <li
+              className={`${className || ""} list-none -ml-5 flex items-center gap-1.5 py-1 cursor-pointer select-none`}
+              onClick={() => handleToggleExactLine(lineNumber)}
+              {...props}
+            >
+              {modifiedChildren}
+            </li>
+          );
+        }
+
+        return (
+          <li className={className} {...props}>
+            {children}
+          </li>
+        );
+      },
+    }),
+    [handleToggleExactLine]
+  );
+
+  // Memoize ReactMarkdown rendering output so in-document search never triggers expensive re-parsing
+  const renderedMarkdown = useMemo(
+    () => (
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={markdownComponents}
+      >
+        {cleanContent}
+      </ReactMarkdown>
+    ),
+    [cleanContent, markdownComponents]
+  );
 
   // In-Document Search (Find Bar ⌘F) state
   const [isFindOpen, setIsFindOpen] = useState(false);
@@ -338,7 +466,15 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
     scrollToMatch(prevIdx - 1);
   };
 
-  // Keyboard shortcut for Cmd/Ctrl + F, Escape, and custom toolbar event
+  const [findShortcut, setFindShortcut] = useState(() => getShortcuts().findInNote);
+
+  useEffect(() => {
+    const handleSync = () => setFindShortcut(getShortcuts().findInNote);
+    window.addEventListener("nota:shortcuts-changed", handleSync);
+    return () => window.removeEventListener("nota:shortcuts-changed", handleSync);
+  }, []);
+
+  // Keyboard shortcut for Find in note, Escape, and custom toolbar event
   useEffect(() => {
     const handleOpenFind = () => {
       setIsFindOpen(true);
@@ -349,7 +485,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+      if (matchesShortcut(e, findShortcut)) {
         e.preventDefault();
         handleOpenFind();
       } else if (e.key === "Escape" && isFindOpen) {
@@ -366,11 +502,11 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("nota:open-find", handleOpenFind);
     };
-  }, [isFindOpen]);
+  }, [isFindOpen, findShortcut]);
 
   return (
     <div className={`flex-1 flex overflow-hidden min-h-0 relative ${activeTheme.editorBg} transition-colors duration-300`}>
-      {/* Floating In-Document Find Bar (⌘F) */}
+      {/* Floating In-Document Find Bar */}
       {isFindOpen && (
         <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-6 z-30 bg-neutral-900 border border-neutral-750 shadow-2xl rounded-xl p-2 flex flex-wrap items-center gap-2 text-xs animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
           <div className="relative flex items-center w-full sm:w-auto">
@@ -500,62 +636,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
           [&_th]:border [&_th]:border-neutral-800 [&_th]:px-4 [&_th]:py-2.5 [&_th]:bg-neutral-900 [&_th]:text-neutral-200 [&_th]:text-left [&_th]:font-semibold
           [&_td]:border [&_td]:border-neutral-800 [&_td]:px-4 [&_td]:py-2 [&_td]:text-neutral-300
           [&>hr]:border-neutral-800 [&>hr]:my-8">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeSlug, rehypeKatex]}
-            components={{
-              code: CodeBlock,
-              li: ({ node, children, className, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { node?: { position?: { start?: { line?: number } } } }) => {
-                const isTaskItem = className?.includes("task-list-item");
-                const lineNumber = node?.position?.start?.line;
-
-                if (isTaskItem && lineNumber) {
-                  // Find checkbox inside children and clone it with proper lineNumber
-                  const modifiedChildren = React.Children.map(children, (child) => {
-                    if (
-                      React.isValidElement(child) &&
-                      typeof child.props === "object" &&
-                      child.props !== null &&
-                      "type" in child.props &&
-                      (child.props as { type: string }).type === "checkbox"
-                    ) {
-                      const childProps = child.props as { checked?: boolean };
-                      return (
-                        <input
-                          type="checkbox"
-                          checked={Boolean(childProps.checked)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handleToggleExactLine(lineNumber);
-                          }}
-                          className="w-4 h-4 rounded border-neutral-700 text-indigo-600 bg-neutral-900 focus:ring-indigo-500 focus:ring-offset-0 transition-all cursor-pointer mr-2.5 align-middle accent-indigo-600 pointer-events-auto shrink-0"
-                        />
-                      );
-                    }
-                    return child;
-                  });
-
-                  return (
-                    <li
-                      className={`${className || ""} list-none -ml-5 flex items-center gap-1.5 py-1 cursor-pointer select-none`}
-                      onClick={() => handleToggleExactLine(lineNumber)}
-                      {...props}
-                    >
-                      {modifiedChildren}
-                    </li>
-                  );
-                }
-
-                return (
-                  <li className={className} {...props}>
-                    {children}
-                  </li>
-                );
-              },
-            }}
-          >
-            {cleanContent}
-          </ReactMarkdown>
+          {renderedMarkdown}
         </article>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Sparkles, Loader2, Check } from "lucide-react";
 import { Language } from "@/lib/i18n";
+import { getShortcuts, matchesShortcut, formatComboDisplay } from "@/lib/shortcuts";
 
 interface VoiceDictationButtonProps {
   lang: Language;
@@ -104,24 +105,48 @@ export default function VoiceDictationButton({
     }
   }, [isListening, lang]);
 
+  const [voiceShortcut, setVoiceShortcut] = useState(() => getShortcuts().voice);
+
+  useEffect(() => {
+    const handleSync = () => setVoiceShortcut(getShortcuts().voice);
+    window.addEventListener("nota:shortcuts-changed", handleSync);
+    return () => window.removeEventListener("nota:shortcuts-changed", handleSync);
+  }, []);
+
   useEffect(() => {
     const handleEditorVoiceCommand = () => toggleListening();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCustomMatch = matchesShortcut(e, voiceShortcut);
+      const isCmdJ = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j";
+
+      if (isCustomMatch || isCmdJ) {
+        e.preventDefault();
+        toggleListening();
+      }
+    };
+
     window.addEventListener("nota:trigger-voice", handleEditorVoiceCommand);
-    return () => window.removeEventListener("nota:trigger-voice", handleEditorVoiceCommand);
-  }, [toggleListening]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("nota:trigger-voice", handleEditorVoiceCommand);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [toggleListening, voiceShortcut]);
 
   if (!isSupported) {
     return null; // Graceful degradation on unsupported browsers
   }
 
+  const displayKey = formatComboDisplay(voiceShortcut) || "⌥Space";
   const label = lang === "th" ? (isListening ? "กำลังฟัง..." : "จดด้วยเสียง") : (isListening ? "Listening..." : "Voice Note");
+  const shortcutHint = `${displayKey} ${lang === "th" ? "หรือ" : "or"} ⌘J`;
 
   return (
     <div className="relative inline-flex items-center">
       <button
         type="button"
         onClick={toggleListening}
-        title={lang === "th" ? "จดโน้ตด้วยเสียง (Voice Dictation)" : "Voice Dictation"}
+        title={`${label} (${shortcutHint})`}
         className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
           isListening
             ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm animate-pulse"
@@ -141,6 +166,9 @@ export default function VoiceDictationButton({
           <>
             <Mic className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
             <span className="hidden sm:inline">{label}</span>
+            <kbd className="hidden lg:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
+              {displayKey}
+            </kbd>
           </>
         )}
       </button>
