@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import Image from "next/image";
 import {
   Folder as FolderIcon,
@@ -63,11 +63,12 @@ interface SidebarProps {
   hasMoreNotes: boolean;
   isLoadingMoreNotes: boolean;
   onLoadMoreNotes: () => Promise<void>;
+  onPrefetchNote?: (id: string) => void;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
 }
 
-export default function Sidebar({
+function Sidebar({
   user,
   folders,
   notes,
@@ -93,6 +94,7 @@ export default function Sidebar({
   hasMoreNotes,
   isLoadingMoreNotes,
   onLoadMoreNotes,
+  onPrefetchNote,
   isOpenMobile = false,
   onCloseMobile,
 }: SidebarProps) {
@@ -512,6 +514,8 @@ export default function Sidebar({
                           draggable={renamingId !== note.id}
                           onDragStart={(e) => handleDragStartNote(e, note.id)}
                           onClick={() => onSelectNote(note.id)}
+                          onMouseEnter={() => onPrefetchNote?.(note.id)}
+                          onFocus={() => onPrefetchNote?.(note.id)}
                           className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors outline-none border ${
                             activeNoteId === note.id
                               ? "bg-neutral-800/90 text-neutral-100 font-medium border-neutral-700/60 shadow-sm"
@@ -593,6 +597,8 @@ export default function Sidebar({
                   draggable={renamingId !== note.id}
                   onDragStart={(e) => handleDragStartNote(e, note.id)}
                   onClick={() => onSelectNote(note.id)}
+                  onMouseEnter={() => onPrefetchNote?.(note.id)}
+                  onFocus={() => onPrefetchNote?.(note.id)}
                   className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors outline-none border ${
                     activeNoteId === note.id
                       ? "bg-neutral-800/90 text-neutral-100 font-medium border-neutral-700/60 shadow-sm"
@@ -688,3 +694,6 @@ export default function Sidebar({
     </>
   );
 }
+
+const MemoizedSidebar = memo(Sidebar);
+export default MemoizedSidebar;

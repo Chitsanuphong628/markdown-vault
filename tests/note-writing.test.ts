@@ -70,3 +70,14 @@ test("write failure is reported once through the coordinator interface", async (
   await assert.rejects(writes.write("note-a", { title: "B" }), /conflict/);
   assert.deepEqual(failures, ["conflict"]);
 });
+
+test("hasFreshNote checks if note is cached and matches revision", async () => {
+  const writes = new NoteWriteCoordinator(async () => initial);
+  assert.equal(writes.hasFreshNote("note-a"), false);
+  writes.observeNote(initial);
+  assert.equal(writes.hasFreshNote("note-a"), true);
+  assert.equal(writes.hasFreshNote("note-a", 0), true);
+  assert.equal(writes.hasFreshNote("note-a", 1), false);
+  writes.observeRevision("note-a", 1);
+  assert.equal(writes.hasFreshNote("note-a"), false);
+});

@@ -97,6 +97,37 @@ interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode;
 }
 
+const highlightCache = new Map<string, string>();
+const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;
+
+function getHighlightedSnippet(rawCode: string, language: string): string {
+  const cacheKey = `${language}:${rawCode}`;
+  const hit = highlightCache.get(cacheKey);
+  if (hit !== undefined) return hit;
+
+  let highlighted = "";
+  if (language && hljs.getLanguage(language)) {
+    try {
+      highlighted = hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
+    } catch {
+      highlighted = hljs.highlightAuto(rawCode).value;
+    }
+  } else {
+    try {
+      highlighted = hljs.highlightAuto(rawCode).value;
+    } catch {
+      highlighted = rawCode;
+    }
+  }
+
+  if (highlightCache.size >= MAX_HIGHLIGHT_CACHE_ENTRIES) {
+    const oldestKey = highlightCache.keys().next().value;
+    if (oldestKey) highlightCache.delete(oldestKey);
+  }
+  highlightCache.set(cacheKey, highlighted);
+  return highlighted;
+}
+
 function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isInline = !className;
@@ -124,21 +155,8 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Perform Highlight.js colorization
-  let highlightedHtml = "";
-  if (language && hljs.getLanguage(language)) {
-    try {
-      highlightedHtml = hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
-    } catch {
-      highlightedHtml = hljs.highlightAuto(rawCode).value;
-    }
-  } else {
-    try {
-      highlightedHtml = hljs.highlightAuto(rawCode).value;
-    } catch {
-      highlightedHtml = rawCode;
-    }
-  }
+  // Perform Highlight.js colorization (cached for 0ms re-renders)
+  const highlightedHtml = useMemo(() => getHighlightedSnippet(rawCode, language), [rawCode, language]);
 
   return (
     <div className="relative group my-5 rounded-2xl overflow-hidden border border-neutral-800 bg-[#1e1e2e] shadow-lg">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -61,6 +61,10 @@ export default function RichNoteEditor({
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const noteColorRef = useRef(noteColor);
   const sourceContentRef = useRef(initialContent);
+  const lastEmittedMarkdownRef = useRef<string>(initialContent);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const editorRef = useRef<any>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     noteColorRef.current = noteColor;
@@ -69,6 +73,36 @@ export default function RichNoteEditor({
   useEffect(() => {
     sourceContentRef.current = initialContent;
   }, [initialContent]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const flushMarkdown = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (edInstance?: any) => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      const targetEd = edInstance || editorRef.current;
+      if (!targetEd) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawMarkdown = (targetEd.storage as any).markdown?.getMarkdown?.() || "";
+      const currentNoteColor = noteColorRef.current;
+      const withTheme = applyNoteBodyChange(sourceContentRef.current, rawMarkdown, currentNoteColor);
+      if (withTheme !== lastEmittedMarkdownRef.current) {
+        lastEmittedMarkdownRef.current = withTheme;
+        sourceContentRef.current = withTheme;
+        onChange(withTheme);
+      }
+    },
+    [onChange]
+  );
 
   const slashCommands: SlashCommand[] = useMemo(
     () => [
@@ -248,11 +282,17 @@ export default function RichNoteEditor({
             return true;
           }
         }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+          flushMarkdown();
+        }
         return false;
       },
     },
+    onBlur: () => {
+      flushMarkdown();
+    },
     onUpdate: ({ editor: ed }) => {
-      // Check for slash query
+      // Check for slash query (instant)
       const { $from } = ed.state.selection;
       const text = $from.parent.textContent;
 
@@ -263,15 +303,19 @@ export default function RichNoteEditor({
         setSlashQuery(null);
       }
 
-      // Serialize to clean markdown
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rawMarkdown = (ed.storage as any).markdown?.getMarkdown?.() || "";
-      const currentNoteColor = noteColorRef.current;
-      const withTheme = applyNoteBodyChange(sourceContentRef.current, rawMarkdown, currentNoteColor);
-      sourceContentRef.current = withTheme;
-      onChange(withTheme);
+      // Debounce markdown serialization to keep 60fps keystroke responsiveness
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        flushMarkdown(ed);
+      }, 250);
     },
   });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   const executeCommand = (cmd: SlashCommand) => {
     if (!editor) return;
@@ -285,15 +329,18 @@ export default function RichNoteEditor({
     setSlashQuery(null);
   };
 
-  // Synchronize when clean content changes from outside
+  // Synchronize when clean content changes from outside (e.g. note switch, voice transcript)
   useEffect(() => {
     if (!editor) return;
+    if (initialContent === lastEmittedMarkdownRef.current) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const currentMarkdown = (editor.storage as any).markdown?.getMarkdown?.() || "";
     if (cleanContent.trim() !== currentMarkdown.trim()) {
       editor.commands.setContent(cleanContent);
+      lastEmittedMarkdownRef.current = initialContent;
+      sourceContentRef.current = initialContent;
     }
-  }, [cleanContent, editor]);
+  }, [cleanContent, initialContent, editor]);
 
   if (!editor) {
     return null;

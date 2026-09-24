@@ -41,6 +41,13 @@ export class NoteWriteCoordinator {
 
   getNote(id: string): EditableNote | undefined { return this.notes.get(id); }
 
+  hasFreshNote(id: string, revision?: number): boolean {
+    const note = this.notes.get(id);
+    if (!note) return false;
+    if (revision !== undefined && note.revision !== revision) return false;
+    return true;
+  }
+
   write(id: string, change: NotePatch | ((current: EditableNote) => NotePatch)): Promise<EditableNote> {
     const previous = this.queues.get(id) ?? Promise.resolve();
     const operation = previous.catch(() => undefined).then(async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -195,6 +195,18 @@ export default function AppHome() {
         setNotes((previous) => (append ? [...previous, ...data.notes] : data.notes));
         setNotesPage(Number.isInteger(data.page) ? data.page : page);
         setHasMoreNotes(Boolean(data.hasMore));
+
+        // Idle-prefetch top 3 recent notes for zero-delay initial clicks
+        const topNotes = data.notes.slice(0, 3);
+        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+          window.requestIdleCallback(() => {
+            topNotes.forEach((n: { id: string }) => prefetchNote(n.id));
+          });
+        } else {
+          setTimeout(() => {
+            topNotes.forEach((n: { id: string }) => prefetchNote(n.id));
+          }, 150);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -202,6 +214,26 @@ export default function AppHome() {
       if (append && requestId === notesRequestIdRef.current) setIsLoadingMoreNotes(false);
     }
   };
+
+  // Prefetch note details to memory cache (e.g. on sidebar hover or idle)
+  const prefetchedIdsRef = useRef<Set<string>>(new Set());
+  const prefetchNote = useCallback(
+    (id: string) => {
+      if (!id || noteWrites.hasFreshNote(id) || prefetchedIdsRef.current.has(id)) return;
+      prefetchedIdsRef.current.add(id);
+      fetch(`/api/notes/${id}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.note) {
+            noteWrites.observeNote(data.note);
+          }
+        })
+        .catch(() => {
+          prefetchedIdsRef.current.delete(id);
+        });
+    },
+    [noteWrites]
+  );
 
   const patchNote = async (id: string, patch: NotePatch | ((current: EditableNote) => NotePatch)) => {
     return noteWrites.write(id, patch);
@@ -220,13 +252,24 @@ export default function AppHome() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch single active note details
+  // Fetch single active note details (Instant SWR cache + background revalidation)
   useEffect(() => {
     setIsEditingTitle(false);
     if (!activeNoteId) {
       setActiveNote(null);
       return;
     }
+
+    // 1. Instant Cache Hit (0ms transition)
+    const cached = noteWrites.getNote(activeNoteId);
+    if (cached) {
+      setActiveNote(cached);
+      setEditTitle(cached.title);
+      setEditContent(cached.content);
+      setIsShared(Boolean((cached as any).isShared));
+    }
+
+    // 2. Background Revalidation (SWR)
     let cancelled = false;
     fetch(`/api/notes/${activeNoteId}`)
       .then((res) => { if (!res.ok) throw new Error("Failed to load note"); return res.json(); })
@@ -572,6 +615,7 @@ export default function AppHome() {
         setLang={setLang}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onPrefetchNote={prefetchNote}
         onSelectNote={(id) => {
           selectActiveNote(id);
           setIsEditing(false);
