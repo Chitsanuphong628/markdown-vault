@@ -14,9 +14,27 @@ const handler = createMcpHandler(({ authInfo }) => {
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
 
+function getEffectiveRequestUrl(request: Request): string {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+  if (forwardedHost) {
+    try {
+      const parsed = new URL(request.url);
+      return `${forwardedProto}://${forwardedHost}${parsed.pathname}${parsed.search}`;
+    } catch {
+      return `${forwardedProto}://${forwardedHost}/api/mcp`;
+    }
+  }
+  return request.url;
+}
+
 function resourceUrl(requestUrl?: string): URL {
   if (!requestUrl || !isTrustedAppUrl(requestUrl)) throw new Error("Untrusted MCP host");
-  return new URL("/api/mcp", requestUrl);
+  const parsed = new URL("/api/mcp", requestUrl);
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) && parsed.protocol === "http:") {
+    parsed.protocol = "https:";
+  }
+  return parsed;
 }
 
 export function oauthMetadata(): OAuthMetadata | null {
@@ -59,8 +77,9 @@ async function authInfoForToken(token: string, resource: URL): Promise<AuthInfo>
 
 export async function serveMcpHttp(request: Request): Promise<Response> {
   if (process.env.ENABLE_MCP !== "true") return Response.json({ error: "MCP disabled" }, { status: 503 });
-  if (!isTrustedAppUrl(request.url)) return Response.json({ error: "Invalid host" }, { status: 403 });
-  const expected = resourceUrl(request.url);
+  const effectiveUrl = getEffectiveRequestUrl(request);
+  if (!isTrustedAppUrl(effectiveUrl)) return Response.json({ error: "Invalid host" }, { status: 403 });
+  const expected = resourceUrl(effectiveUrl);
   const originError = originValidationResponse(request, [expected.hostname]);
   if (originError) return originError;
   const metadata = oauthMetadata();
@@ -75,8 +94,9 @@ export async function serveMcpHttp(request: Request): Promise<Response> {
 
 export function serveMcpOAuthMetadata(request: Request): Response {
   const metadata = oauthMetadata();
-  if (process.env.ENABLE_MCP !== "true" || !metadata || !isTrustedAppUrl(request.url)) return new Response(null, { status: 404 });
+  const effectiveUrl = getEffectiveRequestUrl(request);
+  if (process.env.ENABLE_MCP !== "true" || !metadata || !isTrustedAppUrl(effectiveUrl)) return new Response(null, { status: 404 });
   return oauthMetadataResponse(request, {
-    oauthMetadata: metadata, resourceServerUrl: resourceUrl(request.url), scopesSupported: ["mcp"], resourceName: "Nota Vault",
+    oauthMetadata: metadata, resourceServerUrl: resourceUrl(effectiveUrl), scopesSupported: ["mcp"], resourceName: "Nota Vault",
   }) ?? new Response(null, { status: 404 });
 }
