@@ -166,9 +166,6 @@ export default function VoiceDictationButton({
           <>
             <Mic className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
             <span className="hidden sm:inline">{label}</span>
-            <kbd className="hidden lg:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
-              {displayKey}
-            </kbd>
           </>
         )}
       </button>

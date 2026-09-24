@@ -836,9 +836,6 @@ export default function AppHome() {
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>{isSaving ? t.saving : t.saveNote}</span>
-                      <kbd className="hidden sm:inline-block px-1 py-0.2 bg-indigo-950/60 border border-indigo-400/30 rounded text-[10px] text-indigo-200 font-mono leading-none">
-                        {formatComboDisplay(shortcuts.saveNote)}
-                      </kbd>
                     </button>
                   </>
                 ) : (
@@ -872,7 +869,7 @@ export default function AppHome() {
                                 }`}
                               >
                                 {activeColorKey === cKey && (
-                                  <Check className="w-3 h-3 text-white stroke-[3]" />
+                                  <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
                                 )}
                               </button>
                             );
@@ -888,9 +885,6 @@ export default function AppHome() {
                       className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
                       <Search className="w-3.5 h-3.5" />
-                      <kbd className="hidden sm:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
-                        {formatComboDisplay(shortcuts.findInNote)}
-                      </kbd>
                     </button>
 
                     {/* Share Button */}
@@ -917,9 +911,6 @@ export default function AppHome() {
                     >
                       <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
                       <span className="hidden sm:inline">{t.editNote}</span>
-                      <kbd className="hidden md:inline-block px-1 py-0.2 bg-neutral-900/80 border border-neutral-700/60 rounded text-[10px] text-neutral-400 font-mono leading-none">
-                        {formatComboDisplay(shortcuts.toggleEdit)}
-                      </kbd>
                     </button>
 
                     {/* Delete Button */}
