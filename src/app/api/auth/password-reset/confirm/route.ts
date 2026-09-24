@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hashPassword, matchesOneTimeCode } from "@/lib/auth";
+import { hashPassword, matchesOneTimeCode, invalidateSessionUser } from "@/lib/auth";
 import { enforceAuthRateLimit, getAccountRateLimitKey } from "@/lib/rate-limit";
 import { getClientAddress, rejectCrossOrigin } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase";
@@ -60,5 +60,6 @@ export async function POST(req: Request) {
     .select("id")
     .maybeSingle();
   if (error || !consumedUser) return NextResponse.json({ error: "รหัสรีเซ็ตถูกใช้แล้วหรือหมดอายุ" }, { status: 400 });
+  invalidateSessionUser(user.id);
   return NextResponse.json({ success: true });
 }

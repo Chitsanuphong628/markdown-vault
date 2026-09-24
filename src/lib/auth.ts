@@ -74,7 +74,76 @@ export function matchesOneTimeCode(code: string, expectedHash: string | null | u
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
-export async function getSessionUser() {
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified: boolean;
+}
+
+export interface CachedSession {
+  user: SessionUser;
+  sessionVersion: number;
+  expiresAt: number;
+}
+
+export const sessionCache = new Map<string, CachedSession>();
+export const SESSION_CACHE_TTL_MS = 15_000; // 15 seconds
+
+export function invalidateSessionUser(userId: string): void {
+  sessionCache.delete(userId);
+}
+
+export function clearSessionCache(): void {
+  sessionCache.clear();
+}
+
+export async function resolveUserFromPayload(
+  payload: TokenPayload,
+  fetchUserFromDb: (userId: string) => Promise<{ id: string; email: string; name: string; emailVerified: boolean; sessionVersion: number } | null>
+): Promise<SessionUser | null> {
+  const now = Date.now();
+  const cached = sessionCache.get(payload.userId);
+  if (cached && cached.expiresAt > now) {
+    if (cached.sessionVersion === payload.sessionVersion) {
+      return cached.user;
+    }
+    sessionCache.delete(payload.userId);
+    return null;
+  }
+
+  const user = await fetchUserFromDb(payload.userId);
+  if (!user || user.sessionVersion !== payload.sessionVersion) {
+    sessionCache.delete(payload.userId);
+    return null;
+  }
+
+  const sessionUser: SessionUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    emailVerified: user.emailVerified,
+  };
+
+  if (sessionCache.size >= 2000) {
+    for (const [key, val] of sessionCache.entries()) {
+      if (val.expiresAt <= now) sessionCache.delete(key);
+    }
+    if (sessionCache.size >= 2000) {
+      sessionCache.clear();
+    }
+  }
+
+  sessionCache.set(payload.userId, {
+    user: sessionUser,
+    sessionVersion: user.sessionVersion,
+    expiresAt: now + SESSION_CACHE_TTL_MS,
+  });
+
+  return sessionUser;
+}
+
+export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
@@ -82,18 +151,14 @@ export async function getSessionUser() {
   const payload = verifyToken(token);
   if (!payload) return null;
 
-  const { data: user, error } = await getSupabaseAdmin()
-    .from("User")
-    .select("id, email, name, emailVerified, sessionVersion")
-    .eq("id", payload.userId)
-    .single();
+  return resolveUserFromPayload(payload, async (userId) => {
+    const { data: user, error } = await getSupabaseAdmin()
+      .from("User")
+      .select("id, email, name, emailVerified, sessionVersion")
+      .eq("id", userId)
+      .single();
 
-  if (error || !user || user.sessionVersion !== payload.sessionVersion) return null;
-
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    emailVerified: user.emailVerified,
-  };
+    if (error || !user) return null;
+    return user;
+  });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, invalidateSessionUser } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { rejectCrossOrigin } from "@/lib/security";
 
@@ -19,6 +19,8 @@ export async function DELETE(req: Request) {
     if (deleteUserError) {
       throw new Error(deleteUserError.message);
     }
+
+    invalidateSessionUser(user.id);
 
     // 4. Clear auth session cookie
     const cookieStore = await cookies();
