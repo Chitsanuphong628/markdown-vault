@@ -30,7 +30,7 @@ The process writes MCP protocol data only to stdout. Diagnostics go to stderr. T
 
 ## Remote HTTP
 
-Use `https://your-nota-domain.example/api/mcp` as a Streamable HTTP endpoint. Supply `Authorization: Bearer <MCP key>` through your client's secure credential facility. The endpoint requires the exact configured public host, checks browser Origin, validates a bearer token on every request, and returns HTTP 401 for invalid or missing credentials. It has no cross-origin browser access by default.
+Use `https://your-nota-domain.example/api/mcp` as a Streamable HTTP endpoint. Supply `Authorization: Bearer <MCP key>` through your client's secure credential facility. The endpoint accepts only exact hosts in `APP_ALLOWED_ORIGINS` or trusted Vercel system domains, checks browser Origin, validates a bearer token on every request, and returns HTTP 401 for invalid or missing credentials. It has no cross-origin browser access by default. OAuth access-token `aud` must match the exact host used for that request.
 
 The endpoint is stateless. No `Mcp-Session-Id` storage is required. It accepts legacy 2025-era Streamable HTTP requests through the SDK's stateless fallback. The older HTTP+SSE transport is deprecated by MCP and is not served here.
 

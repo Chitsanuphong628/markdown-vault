@@ -26,6 +26,7 @@ import VoiceDictationButton from "@/components/VoiceDictationButton";
 import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
+import { NoteWriteCoordinator, type NotePatch, type EditableNote } from "@/lib/noteWriting";
 
 // Dynamically load heavy components only when opened or required
 const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
@@ -73,10 +74,29 @@ export default function AppHome() {
   const [isLoadingMoreNotes, setIsLoadingMoreNotes] = useState(false);
   const notesRequestIdRef = useRef(0);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const activeNoteIdRef = useRef<string | null>(null);
+  const selectActiveNote = (id: string | null) => {
+    activeNoteIdRef.current = id;
+    setActiveNoteId(id);
+  };
   const [activeNote, setActiveNote] = useState<any | null>(null);
-  const activeNoteRef = useRef<any | null>(null);
-  const noteRevisionRef = useRef<Record<string, number>>({});
-  const noteWriteQueueRef = useRef<Record<string, Promise<unknown>>>({});
+  const [noteWrites] = useState(() => new NoteWriteCoordinator(async (id, patch, revision) => {
+    const response = await fetch(`/api/notes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...patch, revision }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.note) throw new Error(data.error || `Failed to update note (${response.status})`);
+    return data.note as EditableNote;
+  }, (saved) => {
+    setNotes((previous) => previous.map((note) => note.id === saved.id ? {
+      ...note, title: saved.title, folderId: saved.folderId, revision: saved.revision,
+      color: parseNoteTheme(saved.content).color,
+    } : note));
+    setActiveNote((previous: EditableNote | null) => previous?.id === saved.id ? saved : previous);
+    setOperationError((previous) => previous?.noteId === saved.id ? null : previous);
+  }, (id, error) => setOperationError({ noteId: id, message: error.message })));
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   // Search state
@@ -87,7 +107,7 @@ export default function AppHome() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
 
   // Share state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -151,9 +171,7 @@ export default function AppHome() {
 
   const rememberNoteRevisions = (incomingNotes: Array<{ id: string; revision?: number }> | undefined) => {
     incomingNotes?.forEach((note) => {
-      if (Number.isInteger(note.revision)) {
-        noteRevisionRef.current[note.id] = note.revision as number;
-      }
+      if (Number.isInteger(note.revision)) noteWrites.observeRevision(note.id, note.revision as number);
     });
   };
 
@@ -183,57 +201,8 @@ export default function AppHome() {
     }
   };
 
-  const patchNote = async (
-    id: string,
-    patch: { title?: string; content?: string; folderId?: string | null },
-  ) => {
-    const previousWrite = noteWriteQueueRef.current[id] ?? Promise.resolve();
-    const operation = previousWrite.catch(() => undefined).then(async () => {
-      const currentRevision = noteRevisionRef.current[id]
-        ?? (id === activeNoteId && Number.isInteger(activeNote?.revision) ? activeNote.revision : undefined);
-      if (!Number.isInteger(currentRevision)) {
-        throw new Error("Note version is unavailable; reload the note before saving");
-      }
-
-      const res = await fetch(`/api/notes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...patch, revision: currentRevision }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.note) {
-        if (res.status === 409) {
-          setSaveError("โน้ตถูกแก้ไขจากที่อื่น กรุณาโหลดโน้ตใหม่ก่อนบันทึก");
-        }
-        throw new Error(data.error || `Failed to update note (${res.status})`);
-      }
-
-      noteRevisionRef.current[id] = data.note.revision;
-      setNotes((previous) => previous.map((note) => (
-        note.id === id
-          ? {
-              ...note,
-              title: data.note.title,
-              folderId: data.note.folderId,
-              revision: data.note.revision,
-              color: parseNoteTheme(data.note.content || "").color,
-            }
-          : note
-      )));
-      if (id === activeNoteId) {
-        activeNoteRef.current = data.note;
-        setActiveNote(data.note);
-      }
-      setSaveError(null);
-      return data.note;
-    });
-    const trackedOperation = operation.finally(() => {
-      if (noteWriteQueueRef.current[id] === trackedOperation) {
-        delete noteWriteQueueRef.current[id];
-      }
-    });
-    noteWriteQueueRef.current[id] = trackedOperation;
-    return trackedOperation;
+  const patchNote = async (id: string, patch: NotePatch | ((current: EditableNote) => NotePatch)) => {
+    return noteWrites.write(id, patch);
   };
 
   const isInitialSearchMountRef = useRef(true);
@@ -253,16 +222,13 @@ export default function AppHome() {
   useEffect(() => {
     if (!activeNoteId) {
       setActiveNote(null);
-      activeNoteRef.current = null;
       return;
     }
-
+    let cancelled = false;
     fetch(`/api/notes/${activeNoteId}`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Failed to load note"); return res.json(); })
       .then((data) => {
-        if (data.note) {
-          activeNoteRef.current = data.note;
-          noteRevisionRef.current[data.note.id] = data.note.revision;
+        if (!cancelled && data.note && noteWrites.observeNote(data.note)) {
           setActiveNote(data.note);
           setEditTitle(data.note.title);
           setEditContent(data.note.content);
@@ -270,11 +236,8 @@ export default function AppHome() {
         }
       })
       .catch((err) => console.error("Failed to load note", err));
-  }, [activeNoteId]);
-
-  useEffect(() => {
-    activeNoteRef.current = activeNote;
-  }, [activeNote]);
+    return () => { cancelled = true; };
+  }, [activeNoteId, noteWrites]);
 
   // Handle Toggle Share
   const handleToggleShare = async (newSharedStatus: boolean) => {
@@ -318,9 +281,9 @@ export default function AppHome() {
       });
       const data = await res.json();
       if (data.note) {
-        noteRevisionRef.current[data.note.id] = data.note.revision;
+        noteWrites.observeNote(data.note);
         await loadNotes();
-        setActiveNoteId(data.note.id);
+        selectActiveNote(data.note.id);
         setIsEditing(true);
       }
     } catch (err) {
@@ -331,18 +294,17 @@ export default function AppHome() {
   // Handle Save Note
   const handleSaveNote = async () => {
     if (!activeNoteId) return;
+    const targetId = activeNoteId;
     setIsSaving(true);
-    setSaveError(null);
     try {
-      await patchNote(activeNoteId, {
+      await patchNote(targetId, {
         title: editTitle,
         content: editContent,
       });
-      setIsEditing(false);
+      if (activeNoteIdRef.current === targetId) setIsEditing(false);
       await loadNotes();
     } catch (err) {
       console.error(err);
-      setSaveError(err instanceof Error ? err.message : "บันทึกโน้ตไม่สำเร็จ");
     } finally {
       setIsSaving(false);
     }
@@ -406,7 +368,7 @@ export default function AppHome() {
     try {
       await fetch(`/api/notes/${id}`, { method: "DELETE" });
       if (activeNoteId === id) {
-        setActiveNoteId(null);
+        selectActiveNote(null);
         setActiveNote(null);
       }
       loadNotes();
@@ -418,21 +380,17 @@ export default function AppHome() {
   // Handle note theme color change
   const handleSelectTheme = async (newColor: NoteColorKey) => {
     if (!activeNoteId || !activeNote) return;
-    const currentNote = activeNoteRef.current || activeNote;
-    const sourceContent = isEditing ? editContent : currentNote.content || "";
-    const newContent = applyNoteTheme(sourceContent, newColor);
-    activeNoteRef.current = { ...currentNote, content: newContent };
-    setActiveNote((prev: any) => ({ ...prev, content: newContent }));
-    setEditContent(newContent);
-    setNotes((prevNotes) =>
-      prevNotes.map((n) => (n.id === activeNoteId ? { ...n, color: newColor } : n))
-    );
     setIsColorPickerOpen(false);
+    if (isEditing) {
+      setEditContent((current) => applyNoteTheme(current, newColor));
+      return;
+    }
     try {
-      await patchNote(activeNoteId, { content: newContent });
+      const targetId = activeNoteId;
+      const saved = await patchNote(targetId, (current) => ({ content: applyNoteTheme(current.content, newColor) }));
+      if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
     } catch (err) {
       console.error("Failed to update note theme", err);
-      setSaveError(err instanceof Error ? err.message : "เปลี่ยนสีโน้ตไม่สำเร็จ");
     }
   };
 
@@ -442,16 +400,12 @@ export default function AppHome() {
     if (isEditing) {
       setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
     } else {
-      const currentNote = activeNoteRef.current || activeNote;
-      const updatedContent = currentNote.content ? `${currentNote.content}\n\n${text}` : text;
-      activeNoteRef.current = { ...currentNote, content: updatedContent };
-      setActiveNote((prev: any) => ({ ...prev, content: updatedContent }));
-      setEditContent(updatedContent);
       try {
-        await patchNote(activeNoteId, { content: updatedContent });
+        const targetId = activeNoteId;
+        const saved = await patchNote(targetId, (current) => ({ content: current.content ? `${current.content}\n\n${text}` : text }));
+        if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
       } catch (err) {
         console.error("Failed to append voice transcript", err);
-        setSaveError(err instanceof Error ? err.message : "บันทึกเสียงไม่สำเร็จ");
       }
     }
   };
@@ -462,16 +416,12 @@ export default function AppHome() {
     if (isEditing) {
       setEditContent((prev) => `${prev}\n${markdown}\n`);
     } else {
-      const currentNote = activeNoteRef.current || activeNote;
-      const updatedContent = `${currentNote.content || ""}\n${markdown}\n`;
-      activeNoteRef.current = { ...currentNote, content: updatedContent };
-      setActiveNote((prev: any) => ({ ...prev, content: updatedContent }));
-      setEditContent(updatedContent);
       try {
-        await patchNote(activeNoteId, { content: updatedContent });
+        const targetId = activeNoteId;
+        const saved = await patchNote(targetId, (current) => ({ content: `${current.content}\n${markdown}\n` }));
+        if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
       } catch (err) {
         console.error("Failed to insert chart", err);
-        setSaveError(err instanceof Error ? err.message : "แทรกชาร์ตไม่สำเร็จ");
       }
     }
   };
@@ -493,32 +443,30 @@ export default function AppHome() {
   // Handle Delete Folder
   const handleDeleteFolder = async (id: string) => {
     try {
-      await fetch(`/api/folders/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/folders/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Could not delete folder (${response.status})`);
+      }
+      setOperationError((previous) => previous?.noteId === null ? null : previous);
       if (selectedFolderId === id) setSelectedFolderId(null);
       loadFolders();
       loadNotes();
     } catch (err) {
       console.error(err);
+      setOperationError({ noteId: null, message: err instanceof Error ? err.message : "ลบโฟลเดอร์ไม่สำเร็จ" });
     }
   };
 
   // Handle Rename Note
   const handleRenameNote = async (id: string, newTitle: string) => {
     if (!newTitle.trim()) return;
-    // Optimistic update
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, title: newTitle.trim() } : n))
-    );
-    if (activeNote && activeNote.id === id) {
-      setActiveNote((prev: any) => ({ ...prev, title: newTitle.trim() }));
-      setEditTitle(newTitle.trim());
-    }
     try {
       await patchNote(id, { title: newTitle.trim() });
+      if (activeNoteIdRef.current === id) setEditTitle(newTitle.trim());
       await loadNotes();
     } catch (err) {
       console.error("Failed to rename note:", err);
-      loadNotes();
     }
   };
 
@@ -544,16 +492,11 @@ export default function AppHome() {
 
   // Handle Move Note
   const handleMoveNote = async (noteId: string, targetFolderId: string | null) => {
-    // Optimistic UI update
-    setNotes((prev) =>
-      prev.map((n) => (n.id === noteId ? { ...n, folderId: targetFolderId } : n))
-    );
     try {
       await patchNote(noteId, { folderId: targetFolderId });
       await loadNotes();
     } catch (err) {
       console.error("Failed to move note:", err);
-      loadNotes();
     }
   };
 
@@ -582,7 +525,7 @@ export default function AppHome() {
     router.push("/login");
   };
 
-  const { color: activeColorKey } = parseNoteTheme(activeNote?.content || "");
+  const { color: activeColorKey } = parseNoteTheme(isEditing ? editContent : activeNote?.content || "");
   const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
 
   if (loading || !user) {
@@ -598,6 +541,12 @@ export default function AppHome() {
 
   return (
     <div className="h-screen w-screen bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
+      {operationError && (
+        <div role="alert" className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90vw] rounded-lg border border-rose-500/40 bg-rose-950 px-4 py-3 text-sm text-rose-100 shadow-xl flex items-center gap-3">
+          <span>{operationError.message}</span>
+          <button type="button" onClick={() => setOperationError(null)} aria-label="Dismiss error" className="text-rose-200 hover:text-white">×</button>
+        </div>
+      )}
       {/* Sidebar Tree Navigation */}
       <Sidebar
         user={user}
@@ -610,7 +559,7 @@ export default function AppHome() {
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onSelectNote={(id) => {
-          setActiveNoteId(id);
+          selectActiveNote(id);
           setIsEditing(false);
           setIsMobileSidebarOpen(false);
         }}
@@ -675,12 +624,6 @@ export default function AppHome() {
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {saveError && (
-                  <span className="max-w-44 truncate text-[10px] text-rose-400" title={saveError}>
-                    {saveError}
-                  </span>
-                )}
-
                 {/* Voice Dictation Button (Always available with ⌥Space / ⌘J) */}
                 <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
 
@@ -936,11 +879,11 @@ export default function AppHome() {
                 onUpdateContent={async (newContent) => {
                   if (!activeNoteId) return;
                   try {
-                    const updatedNote = await patchNote(activeNoteId, { content: newContent });
-                    setEditContent(updatedNote.content);
+                    const targetId = activeNoteId;
+                    const updatedNote = await patchNote(targetId, { content: newContent });
+                    if (activeNoteIdRef.current === targetId) setEditContent(updatedNote.content);
                   } catch (err) {
                     console.error("Failed to update note content", err);
-                    setSaveError(err instanceof Error ? err.message : "บันทึกเนื้อหาไม่สำเร็จ");
                   }
                 }}
               />

@@ -5,6 +5,39 @@ export interface DataIngestResult {
   markdown: string;
 }
 
+const SUPPORTED_EXTENSIONS = [".md", ".markdown", ".csv", ".tsv", ".json"];
+
+export function isSupportedFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return SUPPORTED_EXTENSIONS.some((extension) => name.endsWith(extension))
+    || ["text/markdown", "text/csv", "application/json"].includes(file.type);
+}
+
+export async function importFiles(files: File[], folderId: string | null, fetchNote: typeof fetch = fetch) {
+  const imported: File[] = [];
+  const failed: Array<{ file: File; error: string }> = [];
+  for (const file of files) {
+    try {
+      if (!isSupportedFile(file)) throw new Error("Unsupported file type");
+      const { title, markdown } = await convertFileToMarkdown(file);
+      const response = await fetchNote("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content: markdown, folderId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof body.error === "string" ? body.error : `Could not save note (${response.status})`);
+      }
+      if (typeof body.note?.id !== "string") throw new Error("Note was not confirmed by the server");
+      imported.push(file);
+    } catch (error) {
+      failed.push({ file, error: error instanceof Error ? error.message : "Import failed" });
+    }
+  }
+  return { imported, failed };
+}
+
 /**
  * Parses raw file and converts to clean, structured markdown note with data profiling.
  */
@@ -13,16 +46,16 @@ export async function convertFileToMarkdown(file: File): Promise<DataIngestResul
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
   const rawTitle = fileName.replace(/\.[^/.]+$/, "");
 
-  if (ext === "md" || ext === "markdown") {
+  if (ext === "md" || ext === "markdown" || (ext !== "csv" && ext !== "tsv" && ext !== "json" && file.type === "text/markdown")) {
     const text = await file.text();
     return { title: rawTitle, markdown: text };
   }
 
-  if (ext === "csv" || ext === "tsv") {
+  if (ext === "csv" || ext === "tsv" || file.type === "text/csv") {
     return await convertDelimitedToMarkdown(file, rawTitle, ext === "tsv" ? "\t" : ",");
   }
 
-  if (ext === "json") {
+  if (ext === "json" || file.type === "application/json") {
     return await convertJsonToMarkdown(file, rawTitle);
   }
 
@@ -250,11 +283,7 @@ ${JSON.stringify(data, null, 2)}
 `;
 
     return { title, markdown: mdContent };
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    return {
-      title,
-      markdown: `# ${title}\n\n> ⚠️ Invalid JSON file: ${errMsg}\n\n\`\`\`text\n${text}\n\`\`\``,
-    };
+  } catch {
+    throw new Error("Invalid JSON file");
   }
 }

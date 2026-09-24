@@ -1,7 +1,7 @@
 import { createMcpHandler, getOAuthProtectedResourceMetadataUrl, oauthMetadataResponse, originValidationResponse,
   requireBearerAuth, OAuthError, OAuthErrorCode, type AuthInfo, type OAuthMetadata } from "@modelcontextprotocol/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { getPublicAppUrl } from "@/lib/env";
+import { isTrustedAppUrl } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { createNotaMcpServer } from "./server";
 import { verifyMcpCredential } from "./credentials";
@@ -15,7 +15,8 @@ const handler = createMcpHandler(({ authInfo }) => {
 let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
 
 function resourceUrl(requestUrl?: string): URL {
-  return new URL("/api/mcp", getPublicAppUrl(requestUrl));
+  if (!requestUrl || !isTrustedAppUrl(requestUrl)) throw new Error("Untrusted MCP host");
+  return new URL("/api/mcp", requestUrl);
 }
 
 export function oauthMetadata(): OAuthMetadata | null {
@@ -58,11 +59,8 @@ async function authInfoForToken(token: string, resource: URL): Promise<AuthInfo>
 
 export async function serveMcpHttp(request: Request): Promise<Response> {
   if (process.env.ENABLE_MCP !== "true") return Response.json({ error: "MCP disabled" }, { status: 503 });
+  if (!isTrustedAppUrl(request.url)) return Response.json({ error: "Invalid host" }, { status: 403 });
   const expected = resourceUrl(request.url);
-  const actual = new URL(request.url);
-  if (actual.host !== expected.host || actual.protocol !== expected.protocol) {
-    return Response.json({ error: "Invalid host" }, { status: 403 });
-  }
   const originError = originValidationResponse(request, [expected.hostname]);
   if (originError) return originError;
   const metadata = oauthMetadata();
@@ -77,7 +75,7 @@ export async function serveMcpHttp(request: Request): Promise<Response> {
 
 export function serveMcpOAuthMetadata(request: Request): Response {
   const metadata = oauthMetadata();
-  if (process.env.ENABLE_MCP !== "true" || !metadata) return new Response(null, { status: 404 });
+  if (process.env.ENABLE_MCP !== "true" || !metadata || !isTrustedAppUrl(request.url)) return new Response(null, { status: 404 });
   return oauthMetadataResponse(request, {
     oauthMetadata: metadata, resourceServerUrl: resourceUrl(request.url), scopesSupported: ["mcp"], resourceName: "Nota Vault",
   }) ?? new Response(null, { status: 404 });

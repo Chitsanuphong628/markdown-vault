@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicAppUrl } from "./env";
+import { isTrustedAppUrl } from "./env";
 
 const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
@@ -8,7 +8,7 @@ export function rejectCrossOrigin(request: Request): NextResponse | null {
 
   const origin = request.headers.get("origin");
   try {
-    if (!origin || new URL(origin).origin !== getPublicAppUrl(request.url)) {
+    if (!origin || new URL(origin).origin !== new URL(request.url).origin || !isTrustedAppUrl(request.url)) {
       return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
     }
   } catch {

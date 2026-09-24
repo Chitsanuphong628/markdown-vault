@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { escapePostgrestSearch } from "@/lib/security";
 import { parseNoteTheme } from "@/lib/noteTheme";
+import { deleteEmptyFolder } from "@/lib/folderLifecycle";
 
 const id = z.string().uuid();
 const title = z.string().trim().min(1).max(240);
@@ -131,11 +132,8 @@ export function createNotaMcpServer(userId: string, authorize?: () => Promise<bo
     description: "Delete an empty folder you own. Child folders and notes must be moved or deleted first.",
     inputSchema: z.object({ id }), annotations: { destructiveHint: true, idempotentHint: false },
   }, ({ id: folderId }) => guarded(async () => {
-    const { data, error } = await db.rpc("delete_nota_empty_folder", {
-      target_folder_id: folderId, target_user_id: userId,
-    });
-    if (error) throw error;
-    return data ? { deleted: folderId } : "Folder not found or not empty";
+    const result = await deleteEmptyFolder(userId, folderId, db);
+    return result.deleted ? { deleted: folderId } : "Folder not found or not empty";
   }));
 
   server.registerTool("share_note", {

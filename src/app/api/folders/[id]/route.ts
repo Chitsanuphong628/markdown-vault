@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
 import { rejectCrossOrigin } from "@/lib/security";
 import { z } from "zod";
+import { deleteEmptyFolder } from "@/lib/folderLifecycle";
 
 const folderPatchSchema = z.object({ name: z.string().trim().min(1).max(120).optional(), parentId: z.string().uuid().nullable().optional() })
   .refine((value) => value.name !== undefined || value.parentId !== undefined, "No updates provided");
@@ -17,18 +18,14 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Invalid folder ID" }, { status: 400 });
 
   try {
-    const { error } = await getSupabaseAdmin()
-      .from("Folder")
-      .delete()
-      .eq("id", id)
-      .eq("userId", user.id);
-
-    if (error) throw error;
+    const result = await deleteEmptyFolder(user.id, id);
+    if (!result.deleted) return NextResponse.json({ error: "Folder not found or not empty" }, { status: 409 });
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Could not delete folder" }, { status: 500 });
   }
 }
 

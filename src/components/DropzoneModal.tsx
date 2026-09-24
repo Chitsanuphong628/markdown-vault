@@ -3,19 +3,7 @@
 import { useState, useRef } from "react";
 import { UploadCloud, X, FileText, CheckCircle2, AlertCircle, Loader2, Database } from "lucide-react";
 import { Language, I18N_MAIN } from "@/lib/i18n";
-import { convertFileToMarkdown } from "@/lib/dataIngest";
-
-const SUPPORTED_EXTENSIONS = [".md", ".markdown", ".csv", ".tsv", ".json"];
-
-function isSupportedFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return (
-    SUPPORTED_EXTENSIONS.some((ext) => name.endsWith(ext)) ||
-    file.type === "text/markdown" ||
-    file.type === "text/csv" ||
-    file.type === "application/json"
-  );
-}
+import { importFiles } from "@/lib/dataIngest";
 
 interface DropzoneModalProps {
   isOpen: boolean;
@@ -58,15 +46,14 @@ export default function DropzoneModal({
     setIsDragging(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const validFiles = Array.from(e.dataTransfer.files).filter(isSupportedFile);
-      setFilesToUpload((prev) => [...prev, ...validFiles]);
+      setFilesToUpload((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const validFiles = Array.from(e.target.files).filter(isSupportedFile);
-      setFilesToUpload((prev) => [...prev, ...validFiles]);
+      const selectedFiles = Array.from(e.target.files);
+      setFilesToUpload((prev) => [...prev, ...selectedFiles]);
     }
   };
 
@@ -79,31 +66,15 @@ export default function DropzoneModal({
     setUploading(true);
     setUploadStatus(null);
 
-    try {
-      for (const file of filesToUpload) {
-        // Convert CSV, TSV, JSON, or MD to clean Markdown
-        const { title, markdown } = await convertFileToMarkdown(file);
-
-        await fetch("/api/notes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title,
-            content: markdown,
-            folderId: selectedFolder || null,
-          }),
-        });
-      }
-
-      setFilesToUpload([]);
-      onSuccess();
+    const result = await importFiles(filesToUpload, selectedFolder || null);
+    if (result.imported.length > 0) onSuccess();
+    setFilesToUpload(result.failed.map((item) => item.file));
+    if (result.failed.length > 0) {
+      setUploadStatus(result.failed.map((item) => `${item.file.name}: ${item.error}`).join(" · "));
+    } else {
       onClose();
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setUploadStatus("เกิดข้อผิดพลาดในการอัปโหลดไฟล์: " + errMsg);
-    } finally {
-      setUploading(false);
     }
+    setUploading(false);
   };
 
   return (

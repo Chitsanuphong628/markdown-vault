@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.NEXT_PUBLIC_APP_URL = "https://nota.example";
+process.env.APP_ALLOWED_ORIGINS = "https://nota.example";
 process.env.ENABLE_MCP = "true";
 
 test("HTTP MCP rejects missing and invalid bearer credentials before protocol dispatch", async () => {

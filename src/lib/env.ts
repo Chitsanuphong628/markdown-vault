@@ -37,3 +37,28 @@ export function getPublicAppUrl(requestUrl?: string): string {
   }
   throw new Error("Missing required environment variable: NEXT_PUBLIC_APP_URL");
 }
+
+/** Trusted serving origins, separate from the canonical URL used for metadata. */
+export function isTrustedAppUrl(requestUrl: string): boolean {
+  const origin = new URL(requestUrl).origin;
+  const allowed = new Set<string>();
+  for (const value of (process.env.APP_ALLOWED_ORIGINS ?? "").split(",")) {
+    try {
+      const configured = new URL(value.trim());
+      if (configured.protocol === "https:") allowed.add(configured.origin);
+    } catch { /* fail closed for invalid entries */ }
+  }
+  if (process.env.VERCEL_ENV === "production" || process.env.VERCEL_ENV === "preview") {
+    const domains = process.env.VERCEL_ENV === "production"
+      ? [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]
+      : [process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL];
+    for (const domain of domains) {
+      if (domain && /^[a-z0-9.-]+$/i.test(domain)) allowed.add(`https://${domain.toLowerCase()}`);
+    }
+  }
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV
+    && ["localhost", "127.0.0.1", "[::1]"].includes(new URL(requestUrl).hostname)) {
+    allowed.add(origin);
+  }
+  return allowed.has(origin);
+}
