@@ -194,6 +194,23 @@ function Sidebar({
     }
   };
 
+  const isDescendantFolder = useCallback(
+    (folderId: string, targetId: string | null): boolean => {
+      if (!targetId) return false;
+      if (folderId === targetId) return true;
+      const visited = new Set<string>();
+      let curr = folders.find((f) => f.id === targetId);
+      while (curr && curr.parentId) {
+        if (visited.has(curr.id)) break;
+        visited.add(curr.id);
+        if (curr.parentId === folderId) return true;
+        curr = folders.find((f) => f.id === curr!.parentId);
+      }
+      return false;
+    },
+    [folders]
+  );
+
   const handleDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
     e.preventDefault();
     e.stopPropagation();
@@ -209,8 +226,8 @@ function Sidebar({
           await onMoveNote(data.id, targetFolderId);
         }
       } else if (data.type === "folder" && data.id) {
-        // Prevent moving folder into itself
-        if (data.id === targetFolderId) return;
+        // Prevent moving folder into itself or its descendants (cycle prevention)
+        if (isDescendantFolder(data.id, targetFolderId)) return;
         if (onMoveFolder) {
           await onMoveFolder(data.id, targetFolderId);
         }

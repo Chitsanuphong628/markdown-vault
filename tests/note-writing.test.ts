@@ -81,3 +81,12 @@ test("hasFreshNote checks if note is cached and matches revision", async () => {
   writes.observeRevision("note-a", 1);
   assert.equal(writes.hasFreshNote("note-a"), false);
 });
+
+test("evictNote removes note, revision, and queues from coordinator", async () => {
+  const writes = new NoteWriteCoordinator(async () => initial);
+  writes.observeNote(initial);
+  assert.equal(writes.hasFreshNote("note-a"), true);
+  writes.evictNote("note-a");
+  assert.equal(writes.hasFreshNote("note-a"), false);
+  assert.equal(writes.getNote("note-a"), undefined);
+});

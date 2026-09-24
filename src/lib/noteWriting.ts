@@ -48,6 +48,12 @@ export class NoteWriteCoordinator {
     return true;
   }
 
+  evictNote(id: string): void {
+    this.notes.delete(id);
+    this.revisions.delete(id);
+    this.queues.delete(id);
+  }
+
   write(id: string, change: NotePatch | ((current: EditableNote) => NotePatch)): Promise<EditableNote> {
     const previous = this.queues.get(id) ?? Promise.resolve();
     const operation = previous.catch(() => undefined).then(async () => {

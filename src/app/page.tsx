@@ -28,6 +28,7 @@ import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
 import { NoteWriteCoordinator, type NotePatch, type EditableNote } from "@/lib/noteWriting";
+import type { RichNoteEditorHandle } from "@/components/RichNoteEditor";
 
 // Dynamically load heavy components only when opened or required
 const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
@@ -76,6 +77,7 @@ export default function AppHome() {
   const notesRequestIdRef = useRef(0);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const activeNoteIdRef = useRef<string | null>(null);
+  const editorInstanceRef = useRef<RichNoteEditorHandle | null>(null);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
   const selectActiveNote = (id: string | null) => {
     activeNoteIdRef.current = id;
@@ -354,11 +356,14 @@ export default function AppHome() {
   const handleSaveNote = async () => {
     if (!activeNoteId) return;
     const targetId = activeNoteId;
+    const currentContent = editorMode === "visual"
+      ? (editorInstanceRef.current?.flush() ?? editContent)
+      : editContent;
     setIsSaving(true);
     try {
       await patchNote(targetId, {
         title: editTitle,
-        content: editContent,
+        content: currentContent,
       });
       if (activeNoteIdRef.current === targetId) setIsEditing(false);
       await loadNotes();
@@ -425,14 +430,21 @@ export default function AppHome() {
   // Handle Delete Note
   const handleDeleteNote = async (id: string) => {
     try {
-      await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "ลบโน้ตไม่สำเร็จ");
+      }
+      noteWrites.evictNote(id);
+      prefetchedIdsRef.current.delete(id);
       if (activeNoteId === id) {
         selectActiveNote(null);
         setActiveNote(null);
       }
-      loadNotes();
-    } catch (err) {
+      await loadNotes();
+    } catch (err: any) {
       console.error(err);
+      setOperationError({ noteId: id, message: err.message || "ลบโน้ตไม่สำเร็จ" });
     }
   };
 
@@ -567,24 +579,37 @@ export default function AppHome() {
       await loadNotes();
     } catch (err) {
       console.error("Failed to move note:", err);
+      setOperationError({
+        noteId,
+        message: lang === "th" ? "ไม่สามารถย้ายโน้ตได้" : "Failed to move note",
+      });
     }
   };
 
   // Handle Move Folder
   const handleMoveFolder = async (folderId: string, targetParentId: string | null) => {
+    const originalFolders = [...folders];
     // Optimistic UI update
     setFolders((prev) =>
       prev.map((f) => (f.id === folderId ? { ...f, parentId: targetParentId } : f))
     );
     try {
-      await fetch(`/api/folders/${folderId}`, {
+      const res = await fetch(`/api/folders/${folderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parentId: targetParentId }),
       });
+      if (!res.ok) {
+        throw new Error("Failed to move folder");
+      }
       loadFolders();
     } catch (err) {
       console.error("Failed to move folder:", err);
+      setFolders(originalFolders);
+      setOperationError({
+        noteId: null,
+        message: lang === "th" ? "ไม่สามารถย้ายโฟลเดอร์ได้" : "Failed to move folder",
+      });
       loadFolders();
     }
   };
@@ -951,7 +976,13 @@ export default function AppHome() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditorMode("markdown")}
+                        onClick={() => {
+                          if (editorMode === "visual" && editorInstanceRef.current) {
+                            const flushed = editorInstanceRef.current.flush();
+                            setEditContent(flushed);
+                          }
+                          setEditorMode("markdown");
+                        }}
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
                           editorMode === "markdown"
                             ? "bg-indigo-600 text-white shadow-sm"
@@ -966,6 +997,7 @@ export default function AppHome() {
 
                   {editorMode === "visual" ? (
                     <RichNoteEditor
+                      ref={editorInstanceRef}
                       initialContent={editContent}
                       onChange={(newMarkdown) => setEditContent(newMarkdown)}
                       onOpenChartWizard={() => setIsChartWizardOpen(true)}

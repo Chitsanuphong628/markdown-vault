@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -27,7 +27,11 @@ import {
 import { parseNoteTheme, applyNoteBodyChange } from "@/lib/noteTheme";
 import { Language } from "@/lib/i18n";
 
-interface RichNoteEditorProps {
+export interface RichNoteEditorHandle {
+  flush: () => string;
+}
+
+export interface RichNoteEditorProps {
   initialContent: string;
   onChange: (markdown: string) => void;
   onOpenChartWizard?: () => void;
@@ -43,13 +47,16 @@ interface SlashCommand {
   action: (editor: ReturnType<typeof useEditor>) => void;
 }
 
-export default function RichNoteEditor({
-  initialContent,
-  onChange,
-  onOpenChartWizard,
-  onTriggerVoice,
-  lang = "en",
-}: RichNoteEditorProps) {
+const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(function RichNoteEditor(
+  {
+    initialContent,
+    onChange,
+    onOpenChartWizard,
+    onTriggerVoice,
+    lang = "en",
+  },
+  ref
+) {
   // Extract theme color and clean content without raw frontmatter
   const { color: noteColor, cleanContent } = useMemo(
     () => parseNoteTheme(initialContent),
@@ -74,23 +81,15 @@ export default function RichNoteEditor({
     sourceContentRef.current = initialContent;
   }, [initialContent]);
 
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
-
   const flushMarkdown = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (edInstance?: any) => {
+    (edInstance?: any): string => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
       const targetEd = edInstance || editorRef.current;
-      if (!targetEd) return;
+      if (!targetEd) return sourceContentRef.current;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawMarkdown = (targetEd.storage as any).markdown?.getMarkdown?.() || "";
       const currentNoteColor = noteColorRef.current;
@@ -100,9 +99,27 @@ export default function RichNoteEditor({
         sourceContentRef.current = withTheme;
         onChange(withTheme);
       }
+      return withTheme;
     },
     [onChange]
   );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      flush: () => flushMarkdown(),
+    }),
+    [flushMarkdown]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        flushMarkdown();
+      }
+    };
+  }, [flushMarkdown]);
 
   const slashCommands: SlashCommand[] = useMemo(
     () => [
@@ -517,4 +534,6 @@ export default function RichNoteEditor({
       </div>
     </div>
   );
-}
+});
+
+export default RichNoteEditor;

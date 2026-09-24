@@ -357,14 +357,18 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
   // Clear all highlights
   const clearHighlights = () => {
     if (!articleRef.current) return;
-    const marks = articleRef.current.querySelectorAll("mark.nota-find-highlight");
-    marks.forEach((mark) => {
-      const parent = mark.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
-        parent.normalize();
-      }
-    });
+    try {
+      const marks = articleRef.current.querySelectorAll("mark.nota-find-highlight");
+      marks.forEach((mark) => {
+        const parent = mark.parentNode;
+        if (parent && parent.contains(mark)) {
+          parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
+          parent.normalize();
+        }
+      });
+    } catch (err) {
+      console.warn("clearHighlights DOM cleanup warning:", err);
+    }
     matchesRef.current = [];
     setTotalMatches(0);
     setCurrentMatchIndex(0);

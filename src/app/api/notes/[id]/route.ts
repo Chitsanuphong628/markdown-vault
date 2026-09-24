@@ -67,7 +67,7 @@ export async function PATCH(
       .eq("id", id)
       .eq("userId", user.id)
       .eq("revision", revision)
-      .select("*")
+      .select("*, folder:Folder(name)")
       .single();
 
     if (error || !note) return NextResponse.json({ error: "Note was changed by another session" }, { status: 409 });
