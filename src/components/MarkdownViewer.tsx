@@ -37,7 +37,7 @@ import {
 import TableOfContents, { HeadingItem } from "./TableOfContents";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { parseNoteTheme, NOTE_THEMES } from "@/lib/noteTheme";
-import { getShortcuts, matchesShortcut, formatComboDisplay } from "@/lib/shortcuts";
+import { getShortcuts, matchesShortcut } from "@/lib/shortcuts";
 
 // Register core languages for high performance & minimal bundle size
 hljs.registerLanguage("javascript", javascript);
@@ -131,6 +131,16 @@ function getHighlightedSnippet(rawCode: string, language: string): string {
 function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isInline = !className;
+  const rawCode = String(children).replace(/\n$/, "");
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : "text";
+  const isMermaid = !isInline && language === "mermaid";
+
+  // Perform Highlight.js colorization (cached for 0ms re-renders)
+  const highlightedHtml = useMemo(() => {
+    if (isInline || isMermaid) return "";
+    return getHighlightedSnippet(rawCode, language);
+  }, [isInline, isMermaid, rawCode, language]);
 
   if (isInline) {
     return (
@@ -140,12 +150,8 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
     );
   }
 
-  const rawCode = String(children).replace(/\n$/, "");
-  const match = /language-(\w+)/.exec(className || "");
-  const language = match ? match[1] : "text";
-
   // If language is mermaid, render dynamic chart
-  if (language === "mermaid") {
+  if (isMermaid) {
     return <MermaidChart chart={rawCode} />;
   }
 
@@ -154,9 +160,6 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  // Perform Highlight.js colorization (cached for 0ms re-renders)
-  const highlightedHtml = useMemo(() => getHighlightedSnippet(rawCode, language), [rawCode, language]);
 
   return (
     <div className="relative group my-5 rounded-2xl overflow-hidden border border-neutral-800 bg-[#1e1e2e] shadow-lg">

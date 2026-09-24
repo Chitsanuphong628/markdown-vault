@@ -33,6 +33,7 @@ test("session cache hits and avoids db queries within TTL", async () => {
   // Third call within TTL: cache hit -> still 1 DB query
   const user3 = await resolveUserFromPayload(payload, mockDb);
   assert.equal(dbQueries, 1);
+  assert.equal(user3?.id, "user-123");
 });
 
 test("session cache rejects and evicts when token sessionVersion does not match", async () => {
