@@ -11,3 +11,7 @@ Nota is a Markdown knowledge vault backed by Supabase and deployed through Verce
 ## Verification
 
 Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before opening a pull request. Production configuration, backup rehearsal, and release gates are in `docs/production-runbook.md`.
+
+## MCP
+
+See [MCP setup and security](docs/mcp.md) for local stdio and remote Streamable HTTP configuration. Apply `supabase/migrations/202609240000_mcp_credentials.sql` before enabling MCP.
