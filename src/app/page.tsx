@@ -485,7 +485,11 @@ export default function AppHome() {
   const handleInsertChart = async (markdown: string) => {
     if (!activeNoteId || !activeNote) return;
     if (isEditing) {
-      setEditContent((prev) => `${prev}\n${markdown}\n`);
+      if (editorMode === "visual" && editorInstanceRef.current?.insertMarkdown) {
+        editorInstanceRef.current.insertMarkdown(markdown);
+      } else {
+        setEditContent((prev) => `${prev}\n${markdown}\n`);
+      }
     } else {
       try {
         const targetId = activeNoteId;

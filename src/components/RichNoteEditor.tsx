@@ -29,6 +29,7 @@ import { Language } from "@/lib/i18n";
 
 export interface RichNoteEditorHandle {
   flush: () => string;
+  insertMarkdown: (markdown: string) => void;
 }
 
 export interface RichNoteEditorProps {
@@ -108,6 +109,12 @@ const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(fun
     ref,
     () => ({
       flush: () => flushMarkdown(),
+      insertMarkdown: (markdown: string) => {
+        const targetEd = editorRef.current;
+        if (!targetEd) return;
+        targetEd.chain().focus().insertContent(`\n${markdown}\n`).run();
+        setTimeout(() => flushMarkdown(targetEd), 50);
+      },
     }),
     [flushMarkdown]
   );
