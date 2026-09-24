@@ -23,7 +23,11 @@ export function getWebJwtSecret(): string {
 }
 
 export function getTokenPepper(): string {
-  return required("AUTH_TOKEN_PEPPER");
+  const value = process.env.AUTH_TOKEN_PEPPER?.trim() || process.env.JWT_SECRET?.trim();
+  if (!value) {
+    throw new Error("Missing required environment variable: AUTH_TOKEN_PEPPER or JWT_SECRET");
+  }
+  return value;
 }
 
 export function getPublicAppUrl(requestUrl?: string): string {

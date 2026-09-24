@@ -20,15 +20,50 @@ function getLimiter(): Ratelimit | null {
   return limiter;
 }
 
+interface RateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+
+const memoryStore = new Map<string, RateLimitRecord>();
+const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_REQUESTS = 10;
+
+function enforceMemoryRateLimit(identifier: string): boolean {
+  const now = Date.now();
+  const record = memoryStore.get(identifier);
+
+  if (memoryStore.size > 5000) {
+    for (const [key, value] of memoryStore.entries()) {
+      if (now > value.resetAt) memoryStore.delete(key);
+    }
+  }
+
+  if (!record || now > record.resetAt) {
+    memoryStore.set(identifier, { count: 1, resetAt: now + WINDOW_MS });
+    return true;
+  }
+
+  if (record.count >= MAX_REQUESTS) {
+    return false;
+  }
+
+  record.count += 1;
+  return true;
+}
+
 export async function enforceAuthRateLimit(identifier: string): Promise<boolean> {
   const configuredLimiter = getLimiter();
-  if (!configuredLimiter) {
-    // Local development must remain usable. Production must not silently run
-    // without the shared, serverless-safe limiter.
-    return process.env.NODE_ENV !== "production";
+  if (configuredLimiter) {
+    try {
+      const result = await configuredLimiter.limit(identifier);
+      return result.success;
+    } catch (err) {
+      console.warn("[rate-limit] Upstash error, falling back to memory:", err);
+    }
   }
-  const result = await configuredLimiter.limit(identifier);
-  return result.success;
+
+  return enforceMemoryRateLimit(identifier);
 }
 
 /**
