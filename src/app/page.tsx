@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
+import { AppLayoutSkeleton, NoteContentSkeleton } from "@/components/Skeletons";
 import {
   FileText,
   UploadCloud,
@@ -75,9 +76,13 @@ export default function AppHome() {
   const notesRequestIdRef = useRef(0);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const activeNoteIdRef = useRef<string | null>(null);
+  const [isLoadingNote, setIsLoadingNote] = useState(false);
   const selectActiveNote = (id: string | null) => {
     activeNoteIdRef.current = id;
     setActiveNoteId(id);
+    if (id && !noteWrites.getNote(id)) {
+      setIsLoadingNote(true);
+    }
   };
   const [activeNote, setActiveNote] = useState<any | null>(null);
   const [noteWrites] = useState(() => new NoteWriteCoordinator(async (id, patch, revision) => {
@@ -257,6 +262,7 @@ export default function AppHome() {
     setIsEditingTitle(false);
     if (!activeNoteId) {
       setActiveNote(null);
+      setIsLoadingNote(false);
       return;
     }
 
@@ -267,6 +273,9 @@ export default function AppHome() {
       setEditTitle(cached.title);
       setEditContent(cached.content);
       setIsShared(Boolean((cached as any).isShared));
+      setIsLoadingNote(false);
+    } else {
+      setIsLoadingNote(true);
     }
 
     // 2. Background Revalidation (SWR)
@@ -279,9 +288,13 @@ export default function AppHome() {
           setEditTitle(data.note.title);
           setEditContent(data.note.content);
           setIsShared(Boolean(data.note.isShared));
+          setIsLoadingNote(false);
         }
       })
-      .catch((err) => console.error("Failed to load note", err));
+      .catch((err) => {
+        console.error("Failed to load note", err);
+        if (!cancelled) setIsLoadingNote(false);
+      });
     return () => { cancelled = true; };
   }, [activeNoteId, noteWrites]);
 
@@ -586,14 +599,7 @@ export default function AppHome() {
   const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
 
   if (loading || !user) {
-    return (
-      <div className="h-screen w-screen bg-neutral-950 flex items-center justify-center text-neutral-400">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-medium text-neutral-400">{t.loadingVault}</p>
-        </div>
-      </div>
-    );
+    return <AppLayoutSkeleton />;
   }
 
   return (
@@ -647,7 +653,9 @@ export default function AppHome() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#0c0d0e] relative overflow-hidden">
-        {activeNote ? (
+        {isLoadingNote ? (
+          <NoteContentSkeleton onOpenMobile={() => setIsMobileSidebarOpen(true)} />
+        ) : activeNote ? (
           <>
             {/* Top Toolbar */}
             <div className="h-14 border-b border-neutral-800/80 px-3 sm:px-6 flex items-center justify-between bg-neutral-900/40 backdrop-blur-md z-10">
