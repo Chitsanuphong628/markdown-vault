@@ -442,10 +442,7 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
         {/* Footer Hint text */}
         <div className="px-4 py-2 bg-neutral-900/60 border-t border-neutral-800/60 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
           <span>คลิกลากเพื่อเลื่อน (Pan) • Ctrl + ล้อเมาส์เพื่อซูม</span>
-          <span className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            <span>Pure Vector SVG</span>
-          </span>
+          <span>Pure Vector SVG</span>
         </div>
       </div>
 
