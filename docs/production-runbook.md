@@ -22,6 +22,6 @@
 - RTO: restore public service within four hours.
 - Run and record a restore rehearsal quarterly. During an incident, disable writes, restore the newest point-in-time backup, validate ownership/counts, then re-enable traffic.
 
-## Deliberately disabled
+## MCP release gate
 
-MCP is not a production feature in this release. Do not configure `NOTA_USER_ID`, `NOTA_API_KEY`, or deploy `mcp-server` until it has a separate tenant-isolation security review.
+MCP stays disabled until `202609240000_mcp_credentials.sql` is applied and validated on a restored non-production database, the MCP tests pass, and the tenant-isolation/security review is complete. Then set `ENABLE_MCP=true`. Keep the old `nota_sec_` JWTs, `NOTA_USER_ID`, and `MCP_JWT_SECRET` disabled. See [MCP setup](mcp.md).

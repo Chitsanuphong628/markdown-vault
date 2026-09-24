@@ -25,6 +25,7 @@
     "dotenv": "^18.0.1",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.12.0",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.2",
     "katex": "^0.18.7",
@@ -43,9 +44,11 @@
     "remark-math": "^6.0.0",
     "resend": "^6.28.1",
     "tiptap-markdown": "^0.9.0",
+    "tsx": "^4.23.15",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie": "^0.6.0",
@@ -59,7 +62,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
-    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

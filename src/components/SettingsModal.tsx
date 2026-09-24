@@ -56,7 +56,7 @@ const MCP_TOOLS: ToolItem[] = [
   { name: "create_folder", category: "Write", desc: "Create a new organization folder or sub-folder" },
   { name: "delete_folder", category: "Write", desc: "Remove an empty or obsolete folder" },
   { name: "share_note", category: "Share", desc: "Toggle read-only public web URL sharing" },
-  { name: "scan_and_cleanup", category: "Maintenance", desc: "Check vault integrity and re-index unfiled notes" },
+  { name: "scan_and_cleanup", category: "Maintenance", desc: "Read-only counts for your folders and notes" },
 ];
 
 export default function SettingsModal({
@@ -90,17 +90,49 @@ export default function SettingsModal({
   }>({ total: 0, completed: 0, statusText: "", isWaiting: false });
   const cancelExportRef = useRef(false);
 
-  // User ID / Key state
-  const [generatedUserId, setGeneratedUserId] = useState<string>("");
+  // The raw token is shown only at creation time and never persisted in browser storage.
+  const [apiKey, setApiKey] = useState("");
+  const [credentials, setCredentials] = useState<Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>>([]);
+  const [keyError, setKeyError] = useState("");
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
 
-  const handleGenerateApiKey = () => {
-    setIsGeneratingKey(true);
-    setTimeout(() => {
-      setGeneratedUserId(user.id);
-      setIsGeneratingKey(false);
-    }, 150);
+  const loadCredentials = async () => {
+    const response = await fetch("/api/auth/api-key", { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json();
+    setCredentials(data.credentials ?? []);
   };
+
+  const handleGenerateApiKey = async () => {
+    setIsGeneratingKey(true);
+    setKeyError("");
+    try {
+      const response = await fetch("/api/auth/api-key", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create key");
+      setApiKey(data.token);
+      await loadCredentials();
+    } catch (error) {
+      setKeyError(error instanceof Error ? error.message : "Could not create key");
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
+  const handleRevokeKey = async (id: string) => {
+    const response = await fetch("/api/auth/api-key", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!response.ok) { setKeyError("Could not revoke key"); return; }
+    setApiKey("");
+    await loadCredentials();
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === "mcp") void loadCredentials();
+  }, [isOpen, activeTab]);
+
+  useEffect(() => {
+    if (!isOpen) setApiKey("");
+  }, [isOpen]);
 
   // Delete account confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -369,7 +401,13 @@ export default function SettingsModal({
 
   const claudeConfig = JSON.stringify(
     {
-      disabled: "MCP is unavailable in this public-production release.",
+      mcpServers: {
+        "nota-vault": {
+          command: "node",
+          args: ["/absolute/path/to/nota/mcp-server/index.js"],
+          env: { NOTA_API_KEY: apiKey || "PASTE_YOUR_MCP_KEY" },
+        },
+      },
     },
     null,
     2
@@ -377,7 +415,12 @@ export default function SettingsModal({
 
   const cursorConfig = JSON.stringify(
     {
-      disabled: "MCP is unavailable in this public-production release.",
+      mcpServers: {
+        "nota-vault": {
+          url: `${typeof window === "undefined" ? "https://your-nota-domain.example" : window.location.origin}/api/mcp`,
+          headers: { Authorization: `Bearer ${apiKey || "PASTE_YOUR_MCP_KEY"}` },
+        },
+      },
     },
     null,
     2
@@ -485,9 +528,8 @@ export default function SettingsModal({
 
             <button
               type="button"
-              disabled
-              title="MCP is disabled for the public-production release"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-not-allowed opacity-50 outline-none text-left w-max shrink-0 whitespace-nowrap sm:w-full ${
+              onClick={() => setActiveTab("mcp")}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer outline-none text-left w-max shrink-0 whitespace-nowrap sm:w-full ${
                 activeTab === "mcp"
                   ? "bg-neutral-800 text-white"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
@@ -883,24 +925,21 @@ export default function SettingsModal({
                   <h3 className="text-base font-semibold text-neutral-100 mb-1">
                     Model Context Protocol (MCP)
                   </h3>
-                  <p className="text-sm text-amber-300 leading-relaxed">
-                    MCP ถูกปิดชั่วคราวสำหรับ public production ระหว่างการตรวจสอบ tenant isolation และ API-key security
+                  <p className="text-sm text-neutral-400 leading-relaxed">
+                    ใช้ key ส่วนตัวสำหรับ stdio หรือ Streamable HTTP; key หมดอายุใน 90 วันและเพิกถอนได้ทันที
                   </p>
                 </div>
 
                 {/* Status Header */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-neutral-950/40 border border-neutral-800">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-neutral-500" />
                     <span className="text-sm font-semibold text-neutral-200">
-                      Server Status: <span className="text-emerald-400 font-medium">Online</span>
-                    </span>
-                    <span className="text-xs font-mono text-neutral-400 ml-2">
-                      (stdio / local transport)
+                      MCP Transport: <span className="text-neutral-300 font-medium">stdio / Streamable HTTP</span>
                     </span>
                   </div>
                   <span className="text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-750 px-2.5 py-1 rounded-md">
-                    10 RPC Tools Active
+                    10 MCP Tools
                   </span>
                 </div>
 
@@ -924,32 +963,35 @@ export default function SettingsModal({
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>Generating...</span>
                         </>
-                      ) : generatedUserId ? (
-                        "Regenerate Key"
-                      ) : (
-                        "Generate Key"
-                      )}
+                      ) : "Generate Key"}
                     </button>
                   </div>
 
                   <p className="text-xs text-neutral-400 leading-relaxed">
-                    MCP จะกลับมาเปิดได้หลังผ่าน security review และมี credential model ที่แยกจาก web session โดยสมบูรณ์
+                    คัดลอก key ตอนนี้เท่านั้น ระบบเก็บเพียง hash และจะไม่แสดง key เดิมอีก
                   </p>
 
-                  {generatedUserId && (
+                  {keyError && <p role="alert" className="text-xs text-red-300">{keyError}</p>}
+                  {apiKey && (
                     <div className="flex items-center gap-3 p-2.5 bg-neutral-900 border border-neutral-800 rounded-lg">
                       <span className="font-mono text-xs text-neutral-200 truncate flex-1 select-all">
-                        {generatedUserId}
+                        {apiKey}
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleCopy(generatedUserId, "userid")}
+                        onClick={() => handleCopy(apiKey, "mcp-key")}
                         className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-750 text-neutral-200 rounded text-xs font-mono transition-colors shrink-0 cursor-pointer"
                       >
-                        {copiedConfig === "userid" ? "Copied!" : "Copy ID"}
+                        {copiedConfig === "mcp-key" ? "Copied!" : "Copy Key"}
                       </button>
                     </div>
                   )}
+                  {credentials.filter(item => !item.revokedAt).map(item => (
+                    <div key={item.id} className="flex items-center justify-between text-xs text-neutral-400">
+                      <span>Created {new Date(item.createdAt).toLocaleDateString()} · Expires {new Date(item.expiresAt).toLocaleDateString()}</span>
+                      <button type="button" onClick={() => handleRevokeKey(item.id)} className="text-red-300 hover:text-red-200">Revoke</button>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Configuration Snippets */}
@@ -1008,7 +1050,7 @@ export default function SettingsModal({
                     {activeConfigTab === "claude" ? claudeConfig : cursorConfig}
                   </pre>
                   <p className="text-xs text-neutral-400 font-mono">
-                    * Replace <code className="text-neutral-300">./mcp-server/index.js</code> with your absolute workspace path if running outside the project root.
+                    Claude uses local stdio; Cursor example uses HTTPS. Replace the path with your local checkout. Keep the key private.
                   </p>
                 </div>
 
