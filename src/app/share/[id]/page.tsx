@@ -101,7 +101,7 @@ export default function ShareNotePage({ params }: SharePageProps) {
 
       {/* Reader Layout */}
       <main className="flex-1 flex overflow-hidden">
-        <MarkdownViewer note={note} />
+        <MarkdownViewer note={note} showTitle={true} />
       </main>
     </div>
   );

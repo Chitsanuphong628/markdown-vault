@@ -89,6 +89,7 @@ interface MarkdownViewerProps {
   };
   onUpdateContent?: (newContent: string) => Promise<void>;
   lang?: Language;
+  showTitle?: boolean;
 }
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
@@ -177,7 +178,7 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   );
 }
 
-export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: MarkdownViewerProps) {
+export default function MarkdownViewer({ note, onUpdateContent, lang = "en", showTitle = false }: MarkdownViewerProps) {
   const t = I18N_MAIN[lang];
   // Synchronize internal content when note changes
   const [prevNoteId, setPrevNoteId] = useState(note.id);
@@ -584,44 +585,46 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en" }: M
       <div className="flex-1 overflow-y-auto min-w-0">
         <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-9">
           {/* Document Header */}
-          <div className="mb-6 sm:mb-8 pb-5 sm:pb-6 border-b border-neutral-800/80">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-neutral-400 mb-3">
-            {note.folder && (
-              <span className="flex items-center gap-1.5 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium border border-neutral-700/50">
-                <FolderIcon className="w-3.5 h-3.5 text-amber-400" />
-                {note.folder.name}
+          <div className="mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-neutral-800/80">
+            <div className={`flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-neutral-400 ${showTitle ? "mb-3" : ""}`}>
+              {note.folder && (
+                <span className="flex items-center gap-1.5 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium border border-neutral-700/50">
+                  <FolderIcon className="w-3.5 h-3.5 text-amber-400" />
+                  {note.folder.name}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 text-neutral-400">
+                <Calendar className="w-3.5 h-3.5 text-neutral-500" />
+                <span>
+                  {t.lastUpdatedLabel}:{" "}
+                  {new Date(note.updatedAt).toLocaleDateString(lang === "th" ? "th-TH" : "en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
               </span>
+              <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
+              <span className="flex items-center gap-1.5 text-neutral-400">
+                <AlignLeft className="w-3.5 h-3.5 text-neutral-500" />
+                <span>
+                  {stats.words.toLocaleString()} {t.wordsLabel} ({stats.chars.toLocaleString()} {t.charsLabel})
+                </span>
+              </span>
+              <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
+              <span className="flex items-center gap-1.5 text-neutral-400">
+                <Clock className="w-3.5 h-3.5 text-neutral-500" />
+                <span>
+                  ~{stats.readTimeMinutes} {t.readTimeLabel}
+                </span>
+              </span>
+            </div>
+            {showTitle && (
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-neutral-100 leading-tight">
+                {note.title}
+              </h1>
             )}
-            <span className="flex items-center gap-1.5 text-neutral-400">
-              <Calendar className="w-3.5 h-3.5 text-neutral-500" />
-              <span>
-                {t.lastUpdatedLabel}:{" "}
-                {new Date(note.updatedAt).toLocaleDateString(lang === "th" ? "th-TH" : "en-US", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
-            </span>
-            <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
-            <span className="flex items-center gap-1.5 text-neutral-400">
-              <AlignLeft className="w-3.5 h-3.5 text-neutral-500" />
-              <span>
-                {stats.words.toLocaleString()} {t.wordsLabel} ({stats.chars.toLocaleString()} {t.charsLabel})
-              </span>
-            </span>
-            <span className="w-1 h-1 rounded-full bg-neutral-700 hidden sm:inline-block" />
-            <span className="flex items-center gap-1.5 text-neutral-400">
-              <Clock className="w-3.5 h-3.5 text-neutral-500" />
-              <span>
-                ~{stats.readTimeMinutes} {t.readTimeLabel}
-              </span>
-            </span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-neutral-100 leading-tight">
-            {note.title}
-          </h1>
-        </div>
 
         {/* Markdown Render Area */}
         <article ref={articleRef} className="prose prose-invert prose-neutral max-w-none

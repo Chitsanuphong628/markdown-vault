@@ -107,6 +107,8 @@ export default function AppHome() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
 
   // Share state
@@ -220,6 +222,7 @@ export default function AppHome() {
 
   // Fetch single active note details
   useEffect(() => {
+    setIsEditingTitle(false);
     if (!activeNoteId) {
       setActiveNote(null);
       return;
@@ -470,6 +473,17 @@ export default function AppHome() {
     }
   };
 
+  const handleRenameActiveNote = async (newTitle: string) => {
+    setIsEditingTitle(false);
+    if (!activeNote) return;
+    const trimmed = newTitle.trim();
+    if (!trimmed || trimmed === activeNote.title) {
+      setEditTitle(activeNote.title);
+      return;
+    }
+    await handleRenameNote(activeNote.id, trimmed);
+  };
+
   // Handle Rename Folder
   const handleRenameFolder = async (id: string, newName: string) => {
     if (!newName.trim()) return;
@@ -612,9 +626,55 @@ export default function AppHome() {
                 >
                   <FileText className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-sm text-neutral-200 truncate">
-                  {isEditing ? editTitle : activeNote.title}
-                </span>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="font-semibold text-sm text-neutral-100 bg-neutral-800/80 hover:bg-neutral-800 focus:bg-neutral-900 border border-neutral-700/60 focus:border-indigo-500/80 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 w-44 sm:w-64 md:w-80 transition-all truncate"
+                    placeholder={t.noteTitlePlaceholder}
+                    title={lang === "th" ? "แก้ไขชื่อโน้ต" : "Edit note title"}
+                  />
+                ) : isEditingTitle ? (
+                  <input
+                    ref={titleInputRef}
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleRenameActiveNote(editTitle);
+                      } else if (e.key === "Escape") {
+                        setIsEditingTitle(false);
+                        setEditTitle(activeNote.title);
+                      }
+                    }}
+                    onBlur={() => {
+                      void handleRenameActiveNote(editTitle);
+                    }}
+                    className="font-semibold text-sm text-neutral-100 bg-neutral-900 border border-indigo-500/80 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 w-44 sm:w-64 md:w-80 shadow-lg transition-all"
+                    placeholder={t.noteTitlePlaceholder}
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTitle(activeNote.title);
+                      setIsEditingTitle(true);
+                      setTimeout(() => {
+                        titleInputRef.current?.focus();
+                        titleInputRef.current?.select();
+                      }, 50);
+                    }}
+                    className="group flex items-center gap-1.5 font-semibold text-sm text-neutral-200 hover:text-white px-2 py-1 -mx-2 rounded-lg hover:bg-neutral-800/70 border border-transparent hover:border-neutral-700/60 transition-all cursor-pointer max-w-[200px] sm:max-w-xs md:max-w-md truncate text-left"
+                    title={lang === "th" ? "คลิกเพื่อแก้ไขชื่อโน้ต" : "Click to edit title"}
+                  >
+                    <span className="truncate">{activeNote.title || (lang === "th" ? "โน้ตไม่มีชื่อ" : "Untitled Note")}</span>
+                    <Edit3 className="w-3 h-3 text-neutral-500 group-hover:text-indigo-400 opacity-60 group-hover:opacity-100 transition-all shrink-0" />
+                  </button>
+                )}
                 {isShared && (
                   <span className="hidden sm:flex items-center gap-1.5 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-medium">
                     <Globe className="w-3 h-3" />
