@@ -34,6 +34,8 @@ mermaid.initialize({
 
 interface MermaidChartProps {
   chart: string;
+  studio?: boolean;
+  onValidationChange?: (code: string, valid: boolean) => void;
 }
 
 interface ChartToolbarProps {
@@ -49,6 +51,8 @@ interface ChartToolbarProps {
   onDownloadPng: () => void;
   onToggleSource: () => void;
   onToggleFullscreen: () => void;
+  hideSource?: boolean;
+  compact?: boolean;
 }
 
 function ChartToolbar({
@@ -64,9 +68,11 @@ function ChartToolbar({
   onDownloadPng,
   onToggleSource,
   onToggleFullscreen,
+  hideSource = false,
+  compact = false,
 }: ChartToolbarProps) {
   return (
-    <div className="flex items-center gap-1 bg-neutral-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-neutral-700/60 shadow-xl text-neutral-300 text-xs select-none">
+    <div className={`flex items-center gap-1 px-2.5 py-1.5 text-neutral-300 text-xs select-none ${compact ? "bg-transparent" : "rounded-xl border border-neutral-700/60 bg-neutral-900/90 shadow-xl"}`}>
       <button
         type="button"
         onClick={onZoomIn}
@@ -98,7 +104,7 @@ function ChartToolbar({
       <div className="w-[1px] h-4 bg-neutral-700 mx-1" />
 
       {/* Toggle View Source Code */}
-      <button
+      {!hideSource && <button
         type="button"
         onClick={onToggleSource}
         title={showSource ? "ซ่อนโค้ด Mermaid" : "ดูโค้ด Mermaid"}
@@ -107,7 +113,7 @@ function ChartToolbar({
         }`}
       >
         <Code className="w-4 h-4" />
-      </button>
+      </button>}
 
       {/* Copy Code */}
       <button
@@ -154,7 +160,7 @@ function ChartToolbar({
   );
 }
 
-export default function MermaidChart({ chart }: MermaidChartProps) {
+export default function MermaidChart({ chart, studio = false, onValidationChange }: MermaidChartProps) {
   const [svgContent, setSvgContent] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
@@ -189,6 +195,7 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
         if (isMounted) {
           setSvgContent("");
           setError(null);
+          onValidationChange?.(chart, false);
         }
         return;
       }
@@ -201,11 +208,14 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
         if (isMounted) {
           setSvgContent(svg);
           setError(null);
+          onValidationChange?.(chart, true);
         }
       } catch (err: unknown) {
         if (isMounted) {
           const errMsg = err instanceof Error ? err.message : "Failed to render mermaid chart";
+          setSvgContent("");
           setError(errMsg);
+          onValidationChange?.(chart, false);
         }
         // Clean up any dangling error elements created by mermaid in document.body
         const dangling = document.getElementById(`d${id}`);
@@ -217,7 +227,7 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
     return () => {
       isMounted = false;
     };
-  }, [chart]);
+  }, [chart, onValidationChange]);
 
   // Handle ESC key to exit fullscreen
   useEffect(() => {
@@ -346,7 +356,7 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
 
   if (error) {
     return (
-      <div className="my-5 rounded-2xl border border-rose-500/30 bg-rose-950/20 p-5 text-xs font-mono shadow-lg">
+      <div className={`${studio ? "my-3 rounded-md" : "my-5 rounded-2xl shadow-lg"} border border-rose-500/30 bg-rose-950/20 p-5 text-xs font-mono`}>
         <div className="flex items-center justify-between gap-2 text-rose-400 font-semibold mb-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -362,12 +372,12 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
           </button>
         </div>
         <p className="text-rose-300/90 whitespace-pre-wrap leading-relaxed">{error}</p>
-        <div className="mt-3">
+        {!studio && <div className="mt-3">
           <div className="text-[11px] text-neutral-500 mb-1">Source Code:</div>
           <pre className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
             {chart}
           </pre>
-        </div>
+        </div>}
       </div>
     );
   }
@@ -375,9 +385,9 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
   return (
     <>
       {/* Inline Container */}
-      <div className="relative group my-6 rounded-2xl border border-neutral-800 bg-[#16161e] shadow-lg overflow-hidden transition-all">
+      <div className={`relative group border border-neutral-800 bg-[#161922] overflow-hidden ${studio ? "my-3 rounded-md" : "my-6 rounded-2xl shadow-lg"}`}>
         {/* Floating Toolbar on Hover / Focus */}
-        <div className="absolute top-3 right-3 z-10 opacity-75 group-hover:opacity-100 transition-opacity">
+        <div className={studio ? "flex justify-end overflow-x-auto border-b border-neutral-800 p-2" : "absolute top-3 right-3 z-10 opacity-75 group-hover:opacity-100 transition-opacity"}>
           <ChartToolbar
             scale={scale}
             copied={copied}
@@ -391,12 +401,14 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
             onDownloadPng={handleDownloadPng}
             onToggleSource={() => setShowSource((prev) => !prev)}
             onToggleFullscreen={() => toggleFullscreen()}
+            hideSource={studio}
+            compact={studio}
           />
         </div>
 
         {/* Pure Vector SVG Viewport (NO IFRAME) */}
         <div
-          className={`w-full min-h-[260px] max-h-[580px] p-8 flex justify-center items-center overflow-hidden select-none ${
+          className={`w-full min-h-[260px] p-4 sm:p-8 flex justify-center items-center select-none ${studio ? "overflow-visible" : "max-h-[580px] overflow-hidden"} ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
           onMouseDown={handleMouseDown}
@@ -440,15 +452,15 @@ export default function MermaidChart({ chart }: MermaidChartProps) {
         )}
 
         {/* Footer Hint text */}
-        <div className="px-4 py-2 bg-neutral-900/60 border-t border-neutral-800/60 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
+        {!studio && <div className="px-4 py-2 bg-neutral-900/60 border-t border-neutral-800/60 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
           <span>คลิกลากเพื่อเลื่อน (Pan) • Ctrl + ล้อเมาส์เพื่อซูม</span>
           <span>Pure Vector SVG</span>
-        </div>
+        </div>}
       </div>
 
       {/* Fullscreen Interactive Modal */}
       {isFullscreen && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col animate-in fade-in duration-200">
+        <div data-mermaid-fullscreen="true" className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col animate-in fade-in duration-200">
           {/* Top Bar */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-950/80">
             <div className="flex items-center gap-2.5">

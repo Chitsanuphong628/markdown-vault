@@ -98,7 +98,7 @@ export function formatNodeSyntax(node: FlowNode): string {
 /** Generate a complete Flowchart */
 export function generateFlowchart(options: FlowchartOptions): string {
   const { direction, nodes, title } = options;
-  let lines: string[] = [`flowchart ${direction}`];
+  const lines: string[] = [`flowchart ${direction}`];
 
   if (title) {
     const cleanTitle = sanitizeLabel(title);
@@ -112,22 +112,24 @@ export function generateFlowchart(options: FlowchartOptions): string {
     lines.push(`    ${formatNodeSyntax(node)}`);
   }
 
-  // Declare connections
-  const hasCustomBranches = nodes.some((n) => n.branches && n.branches.length > 0);
-
-  if (hasCustomBranches) {
-    for (const node of nodes) {
-      if (node.branches) {
-        for (const branch of node.branches) {
-          const edgeLabel = branch.label ? `|"${sanitizeLabel(branch.label)}"|` : "";
-          lines.push(`    ${node.id} -->${edgeLabel} ${branch.targetId}`);
-        }
+  // Keep the ordinary path connected when a decision introduces branches.
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const siblingOutcomes = nodes.map(node => new Set(
+    (node.branches || []).map(branch => branch.targetId).filter(id => nodeIds.has(id)),
+  ));
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    const branches = (node.branches || []).filter(branch => nodeIds.has(branch.targetId));
+    if (branches.length) {
+      for (const branch of branches) {
+        const edgeLabel = branch.label ? `|"${sanitizeLabel(branch.label)}"|` : "";
+        lines.push(`    ${node.id} -->${edgeLabel} ${branch.targetId}`);
       }
+      continue;
     }
-  } else {
-    // Default linear chain if no explicit branches defined
-    for (let i = 0; i < nodes.length - 1; i++) {
-      lines.push(`    ${nodes[i].id} --> ${nodes[i + 1].id}`);
+    const next = nodes[index + 1];
+    if (next && !siblingOutcomes.some(group => group.has(node.id) && group.has(next.id))) {
+      lines.push(`    ${node.id} --> ${next.id}`);
     }
   }
 
@@ -136,7 +138,7 @@ export function generateFlowchart(options: FlowchartOptions): string {
 
 /** Generate Sequence Diagram */
 export function generateSequenceDiagram(options: SequenceOptions): string {
-  const { participants, messages, title } = options;
+  const { participants, messages } = options;
   const lines: string[] = ["sequenceDiagram"];
 
   lines.push("    autonumber");
@@ -258,13 +260,13 @@ export function generateStateDiagram(options: StateDiagramOptions): string {
 }
 
 export const COLOR_PALETTES = [
-  { key: "indigo", name: { en: "Indigo Flow", th: "อินดิโก้ / น้ำเงินคราม" }, primary: "#6366f1", bg: "bg-indigo-500" },
-  { key: "emerald", name: { en: "Emerald Mint", th: "เขียวมินต์" }, primary: "#10b981", bg: "bg-emerald-500" },
-  { key: "sky", name: { en: "Ocean Sky", th: "ฟ้าน้ำทะเล" }, primary: "#0ea5e9", bg: "bg-sky-500" },
-  { key: "amber", name: { en: "Warm Amber", th: "ส้มอำพัน" }, primary: "#f59e0b", bg: "bg-amber-500" },
-  { key: "purple", name: { en: "Neon Purple", th: "ม่วงนีออน" }, primary: "#a855f7", bg: "bg-purple-500" },
-  { key: "rose", name: { en: "Berry Rose", th: "ชมพูเบอร์รี่" }, primary: "#f43f5e", bg: "bg-rose-500" },
-  { key: "slate", name: { en: "Clean Slate", th: "เทาคลาสสิก" }, primary: "#94a3b8", bg: "bg-slate-400" },
+  { key: "indigo", name: { en: "Indigo", th: "คราม" }, primary: "#6366f1", bg: "bg-indigo-500" },
+  { key: "emerald", name: { en: "Emerald", th: "เขียว" }, primary: "#10b981", bg: "bg-emerald-500" },
+  { key: "sky", name: { en: "Sky", th: "ฟ้า" }, primary: "#0ea5e9", bg: "bg-sky-500" },
+  { key: "amber", name: { en: "Amber", th: "อำพัน" }, primary: "#f59e0b", bg: "bg-amber-500" },
+  { key: "purple", name: { en: "Purple", th: "ม่วง" }, primary: "#a855f7", bg: "bg-purple-500" },
+  { key: "rose", name: { en: "Rose", th: "ชมพู" }, primary: "#f43f5e", bg: "bg-rose-500" },
+  { key: "slate", name: { en: "Slate", th: "เทา" }, primary: "#94a3b8", bg: "bg-slate-400" },
 ];
 
 /** Attach a theme directive to Mermaid code */

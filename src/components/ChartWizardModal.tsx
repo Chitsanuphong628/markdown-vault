@@ -1,23 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   X,
-  BarChart2,
-  PieChart,
-  GitFork,
-  Network,
   Plus,
   Trash2,
   Check,
-  Palette,
-  Eye,
-  LayoutTemplate,
   Code,
   ArrowRight,
-  Sliders,
-  Layers,
-  Sparkles,
   RotateCcw,
 } from "lucide-react";
 import MermaidChart from "@/components/MermaidChart";
@@ -46,6 +36,15 @@ interface ChartWizardModalProps {
 type StudioTab = "visual" | "templates" | "code";
 type VisualType = "flowchart" | "sequence" | "bar" | "pie" | "mindmap" | "state";
 
+const VISUAL_TYPES: Array<{ id: VisualType; en: string; th: string; titleEn: string; titleTh: string }> = [
+  { id: "flowchart", en: "Flowchart", th: "ผังงาน", titleEn: "Process flow", titleTh: "ผังกระบวนการ" },
+  { id: "sequence", en: "Sequence", th: "ลำดับงาน", titleEn: "Sequence diagram", titleTh: "ลำดับการทำงาน" },
+  { id: "bar", en: "Bar / line", th: "กราฟแท่ง / เส้น", titleEn: "Metrics", titleTh: "สถิติ" },
+  { id: "pie", en: "Pie", th: "กราฟวงกลม", titleEn: "Distribution", titleTh: "สัดส่วน" },
+  { id: "mindmap", en: "Mind map", th: "ผังความคิด", titleEn: "Mind map", titleTh: "ผังความคิด" },
+  { id: "state", en: "State", th: "สถานะ", titleEn: "State diagram", titleTh: "สถานะการทำงาน" },
+];
+
 export default function ChartWizardModal({
   isOpen,
   onClose,
@@ -53,8 +52,11 @@ export default function ChartWizardModal({
   lang,
 }: ChartWizardModalProps) {
   const [activeTab, setActiveTab] = useState<StudioTab>("visual");
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [visualType, setVisualType] = useState<VisualType>("flowchart");
+  const [mobilePanel, setMobilePanel] = useState<"edit" | "preview">("edit");
   const [activePalette, setActivePalette] = useState(COLOR_PALETTES[0].key);
+  const [previewResult, setPreviewResult] = useState<{ code: string; valid: boolean }>({ code: "", valid: false });
 
   // Common metadata
   const [title, setTitle] = useState(lang === "th" ? "ผังกระบวนการทำงาน" : "Process Flow");
@@ -109,19 +111,19 @@ export default function ChartWizardModal({
   ]);
 
   // 5. Mindmap State
-  const [mindmapRoot, setMindmapRoot] = useState(lang === "th" ? "Nota Vault" : "Core Project");
+  const [mindmapRoot, setMindmapRoot] = useState(lang === "th" ? "โครงการ" : "Project");
   const [mindmapBranches, setMindmapBranches] = useState([
     {
-      label: lang === "th" ? "ความปลอดภัย (Security)" : "Security",
-      subBranches: [lang === "th" ? "Session Revocation" : "Session Tokens", lang === "th" ? "Row Level Security" : "RLS Policies"],
+      label: lang === "th" ? "เป้าหมาย" : "Goals",
+      subBranches: [lang === "th" ? "ผลลัพธ์" : "Outcome", lang === "th" ? "ตัวชี้วัด" : "Measure"],
     },
     {
-      label: lang === "th" ? "ระบบชาร์ตและผังงาน" : "Chart Studio",
-      subBranches: [lang === "th" ? "Decision Flowcharts" : "Decision Nodes", lang === "th" ? "PNG/SVG Export" : "Retina Export"],
+      label: lang === "th" ? "งาน" : "Tasks",
+      subBranches: [lang === "th" ? "วางแผน" : "Plan", lang === "th" ? "ตรวจทาน" : "Review"],
     },
     {
-      label: lang === "th" ? "ประสิทธิภาพ (Performance)" : "Performance",
-      subBranches: [lang === "th" ? "In-Memory Session Cache" : "Memory Cache", lang === "th" ? "Covering Indexes" : "Covering Indexes"],
+      label: lang === "th" ? "คำถาม" : "Questions",
+      subBranches: [lang === "th" ? "ประเด็นค้าง" : "Open items"],
     },
   ]);
 
@@ -192,13 +194,6 @@ export default function ChartWizardModal({
     lang,
   ]);
 
-  // Sync to customCode when switching from visual to code tab if empty or requested
-  useEffect(() => {
-    if (activeTab === "code" && !customCode) {
-      setCustomCode(generatedVisualCode);
-    }
-  }, [activeTab, customCode, generatedVisualCode]);
-
   // Active Mermaid Code depending on tab
   const activeMermaidCode = useMemo(() => {
     if (activeTab === "code") {
@@ -206,238 +201,138 @@ export default function ChartWizardModal({
     }
     return attachThemeDirective(generatedVisualCode, activePalette);
   }, [activeTab, customCode, generatedVisualCode, activePalette]);
+  const handleValidationChange = useCallback((code: string, valid: boolean) => {
+    setPreviewResult({ code, valid });
+  }, []);
+  const hasCode = Boolean(activeMermaidCode.trim());
+  const previewState = !hasCode ? "empty" : previewResult.code !== activeMermaidCode ? "rendering" : previewResult.valid ? "ready" : "invalid";
+  const canInsert = previewState === "ready";
+
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector('[data-mermaid-fullscreen="true"]')) onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   const handleSelectTemplate = (template: DiagramTemplate) => {
     setCustomCode(template.mermaidCode);
     setActiveTab("code");
+    setMobilePanel("preview");
   };
 
   const handleInsert = () => {
-    const codeToInsert = activeTab === "code" ? customCode : generatedVisualCode;
-    const markdown = `\n\`\`\`mermaid\n${codeToInsert.trim()}\n\`\`\`\n`;
+    if (!canInsert) return;
+    const markdown = `\n\`\`\`mermaid\n${activeMermaidCode.trim()}\n\`\`\`\n`;
     onInsertChart(markdown);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 sm:p-5">
       <div
-        className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chart-studio-title"
+        className="bg-[#0f1117] border border-[#222634] sm:rounded-lg w-full max-w-6xl h-dvh sm:h-[min(92vh,900px)] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-950/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-neutral-100">
-                  {lang === "th" ? "สตูดิโอสร้างชาร์ตและผังงาน" : "Chart & Diagram Studio"}
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Pro Engine
-                </span>
-              </div>
-              <p className="text-xs text-neutral-400">
-                {lang === "th"
-                  ? "ผังงานเงื่อนไขตัดสินใจ • Sequence Diagram • กราฟสถิติ • โค้ดดิบ Mermaid แบบเรียลไทม์"
-                  : "Decision Flowcharts • Sequence Diagrams • Metrics Charts • Live Mermaid Editor"}
-              </p>
-            </div>
-          </div>
-
-          {/* Mode Switcher Tabs */}
-          <div className="flex items-center gap-1 bg-neutral-900/90 border border-neutral-800 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab("visual")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                activeTab === "visual"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>{lang === "th" ? "ตัวสร้างภาพ (Visual)" : "Visual Builder"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("templates")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                activeTab === "templates"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <LayoutTemplate className="w-3.5 h-3.5" />
-              <span>{lang === "th" ? "คลังแม่แบบ (Templates)" : "Templates"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!customCode) setCustomCode(generatedVisualCode);
-                setActiveTab("code");
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                activeTab === "code"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>{lang === "th" ? "โค้ด Mermaid (Code)" : "Mermaid Code"}</span>
-            </button>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-xl transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
+        <div className="flex shrink-0 items-center justify-between border-b border-[#222634] px-4 py-3 sm:px-5">
+          <h2 id="chart-studio-title" className="text-sm font-semibold text-neutral-100">
+            {lang === "th" ? "สร้างกราฟและแผนภาพ" : "Chart & Diagram Studio"}
+          </h2>
+          <button type="button" onClick={onClose} aria-label={lang === "th" ? "ปิดสตูดิโอ" : "Close studio"} className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-indigo-500">
+            <X className="h-4 w-4" />
           </button>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#222634] px-4 sm:px-5">
+          <div role="tablist" aria-label={lang === "th" ? "วิธีสร้าง" : "Creation method"} className="flex gap-5 overflow-x-auto">
+            {([
+              ["visual", lang === "th" ? "สร้างเอง" : "Build"],
+              ["templates", lang === "th" ? "แม่แบบ" : "Templates"],
+              ["code", "Mermaid"],
+            ] as const).map(([tab, label]) => (
+              <button key={tab} type="button" role="tab" aria-selected={activeTab === tab}
+                onClick={() => {
+                  if (tab === "code" && !customCode) setCustomCode(generatedVisualCode);
+                  setActiveTab(tab);
+                  setMobilePanel("edit");
+                }}
+                className={`shrink-0 border-b-2 py-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-indigo-500 ${
+                  activeTab === tab ? "border-indigo-500 text-white" : "border-transparent text-neutral-400 hover:text-neutral-200"
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div role="group" aria-label={lang === "th" ? "มุมมองมือถือ" : "Mobile view"} className="flex shrink-0 gap-1 lg:hidden">
+            <button type="button" aria-pressed={mobilePanel === "edit"} onClick={() => setMobilePanel("edit")} className={`rounded px-2 py-1 text-xs ${mobilePanel === "edit" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}>{lang === "th" ? "แก้ไข" : "Edit"}</button>
+            <button type="button" aria-pressed={mobilePanel === "preview"} onClick={() => setMobilePanel("preview")} className={`rounded px-2 py-1 text-xs ${mobilePanel === "preview" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}>{lang === "th" ? "พรีวิว" : "Preview"}</button>
+          </div>
         </div>
 
         {/* Studio Body: Split View (Controls Left, Live Vector Preview Right) */}
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0">
           {/* Left Column: Form / Template / Code Panel */}
-          <div className="lg:col-span-6 flex flex-col border-b lg:border-b-0 lg:border-r border-neutral-800 bg-neutral-950/40 overflow-y-auto p-6 space-y-6">
+          <div className={`${mobilePanel === "preview" ? "hidden lg:flex" : "flex"} lg:col-span-6 min-h-0 flex-col lg:border-r border-[#222634] overflow-y-auto p-4 sm:p-5 space-y-5`}>
             {/* 1. VISUAL BUILDER TAB */}
             {activeTab === "visual" && (
               <>
-                {/* Visual Type Selector */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2.5">
-                    {lang === "th" ? "เลือกรูปแบบชาร์ตและผังงาน" : "Select Diagram Type"}
+                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+                    {lang === "th" ? "ประเภทแผนภาพ" : "Diagram type"}
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("flowchart");
-                        setTitle(lang === "th" ? "ผังการทำงานและการตัดสินใจ" : "Decision Flowchart");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "flowchart"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <GitFork className="w-4 h-4 text-emerald-400" />
-                      <span>{lang === "th" ? "ผังงาน (Flowchart)" : "Flowchart"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("sequence");
-                        setTitle(lang === "th" ? "ลำดับการทำงาน (API Flow)" : "API Sequence");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "sequence"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <Layers className="w-4 h-4 text-sky-400" />
-                      <span>{lang === "th" ? "ลำดับขั้นตอน (Sequence)" : "Sequence"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("bar");
-                        setTitle(lang === "th" ? "สถิติและผลงาน (Metrics)" : "Metrics Summary");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "bar"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <BarChart2 className="w-4 h-4 text-amber-400" />
-                      <span>{lang === "th" ? "กราฟแท่ง/เส้น (Bar/Line)" : "Bar & Line"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("pie");
-                        setTitle(lang === "th" ? "สัดส่วนงบประมาณ" : "Budget Share");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "pie"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <PieChart className="w-4 h-4 text-purple-400" />
-                      <span>{lang === "th" ? "กราฟวงกลม (Pie)" : "Pie Chart"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("mindmap");
-                        setTitle(lang === "th" ? "แผนผังความคิด" : "Mindmap");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "mindmap"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <Network className="w-4 h-4 text-rose-400" />
-                      <span>{lang === "th" ? "ผังความคิด (Mindmap)" : "Mindmap"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisualType("state");
-                        setTitle(lang === "th" ? "สถานะการทำงาน (State)" : "State Machine");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-medium transition-all cursor-pointer ${
-                        visualType === "state"
-                          ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 shadow-sm"
-                          : "bg-neutral-900/60 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                      }`}
-                    >
-                      <ArrowRight className="w-4 h-4 text-indigo-400" />
-                      <span>{lang === "th" ? "สถานะระบบ (State)" : "State Machine"}</span>
-                    </button>
+                  <div role="group" aria-label={lang === "th" ? "ประเภทแผนภาพ" : "Diagram type"} className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                    {VISUAL_TYPES.map((type) => (
+                      <button key={type.id} type="button" aria-pressed={visualType === type.id}
+                        onClick={() => {
+                          setVisualType(type.id);
+                          setTitle(lang === "th" ? type.titleTh : type.titleEn);
+                        }}
+                        className={`rounded border px-3 py-2 text-left text-xs font-medium focus-visible:outline-2 focus-visible:outline-indigo-500 ${
+                          visualType === type.id
+                            ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
+                            : "border-[#222634] text-neutral-300 hover:border-neutral-600 hover:bg-neutral-800/50"
+                        }`}>
+                        {lang === "th" ? type.th : type.en}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Common Title & Palette */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
+                <div className={`grid gap-4 ${visualType === "bar" || visualType === "pie" ? "sm:grid-cols-2" : ""}`}>
+                  {(visualType === "bar" || visualType === "pie") && <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
-                      {lang === "th" ? "ชื่อหัวข้อแผนภาพ" : "Diagram Title"}
+                      {lang === "th" ? "ชื่อกราฟ" : "Chart title"}
                     </label>
                     <input
                       type="text"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
-                      placeholder="Enter title..."
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3.5 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+                      placeholder={lang === "th" ? "ชื่อกราฟ" : "Chart title"}
                     />
-                  </div>
+                  </div>}
 
                   <div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
-                      <Palette className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>{lang === "th" ? "โทนสีหลัก (Palette)" : "Color Palette"}</span>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                      {lang === "th" ? "โทนสี" : "Color palette"}
                     </label>
                     <select
                       value={activePalette}
                       onChange={(e) => setActivePalette(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
                     >
                       {COLOR_PALETTES.map((p) => (
                         <option key={p.key} value={p.key}>
@@ -465,7 +360,7 @@ export default function ChartWizardModal({
                               : "bg-neutral-900 text-neutral-400 hover:text-neutral-200"
                           }`}
                         >
-                          บนลงล่าง (TD)
+                          {lang === "th" ? "บนลงล่าง" : "Top to bottom"}
                         </button>
                         <button
                           type="button"
@@ -476,17 +371,18 @@ export default function ChartWizardModal({
                               : "bg-neutral-900 text-neutral-400 hover:text-neutral-200"
                           }`}
                         >
-                          ซ้ายไปขวา (LR)
+                          {lang === "th" ? "ซ้ายไปขวา" : "Left to right"}
                         </button>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => {
-                          const nextIdx = flowNodes.length + 1;
+                          let nextIdx = flowNodes.length + 1;
+                          while (flowNodes.some(node => node.id === `Step${nextIdx}`)) nextIdx++;
                           setFlowNodes([
                             ...flowNodes,
-                            { id: `Step${nextIdx}`, label: `ขั้นตอนใหม่ ${nextIdx}`, shape: "rect" },
+                            { id: `Step${nextIdx}`, label: lang === "th" ? `ขั้นตอน ${nextIdx}` : `Step ${nextIdx}`, shape: "rect" },
                           ]);
                         }}
                         className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
@@ -496,27 +392,34 @@ export default function ChartWizardModal({
                       </button>
                     </div>
 
-                    <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    <div className="space-y-2.5 ">
                       {flowNodes.map((node, idx) => (
                         <div
                           key={node.id}
-                          className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2"
+                          className="border-b border-[#222634] py-3 space-y-2"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_1.25rem] items-center gap-2 sm:flex">
                             <span className="text-xs font-mono text-neutral-500 w-6">{idx + 1}.</span>
                             <select
                               value={node.shape}
                               onChange={(e) => {
-                                const updated = [...flowNodes];
-                                updated[idx].shape = e.target.value as FlowNode["shape"];
-                                setFlowNodes(updated);
+                                const shape = e.target.value as FlowNode["shape"];
+                                const otherNodes = [...flowNodes.slice(idx + 1), ...flowNodes.slice(0, idx)];
+                                setFlowNodes(flowNodes.map((item, itemIndex) => itemIndex === idx ? {
+                                  ...item,
+                                  shape,
+                                  branches: shape === "diamond" ? item.branches || [
+                                    { targetId: otherNodes[0]?.id || item.id, label: lang === "th" ? "ไม่" : "No" },
+                                    { targetId: otherNodes[1]?.id || otherNodes[0]?.id || item.id, label: lang === "th" ? "ใช่" : "Yes" },
+                                  ] : undefined,
+                                } : item));
                               }}
-                              className="bg-neutral-900 border border-neutral-700/80 rounded-lg px-2 py-1 text-xs text-neutral-300 focus:outline-none"
+                              className="min-w-0 w-full sm:w-auto bg-neutral-900 border border-neutral-700/80 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none"
                             >
-                              <option value="rect">■ สี่เหลี่ยม (Process)</option>
-                              <option value="diamond">◆ ข้าวหลามตัด (Decision เงื่อนไข)</option>
-                              <option value="round">● วงรี (Start/End)</option>
-                              <option value="database">⛁ ฐานข้อมูล (Database)</option>
+                              <option value="rect">{lang === "th" ? "ขั้นตอน" : "Process"}</option>
+                              <option value="diamond">{lang === "th" ? "เงื่อนไข" : "Decision"}</option>
+                              <option value="round">{lang === "th" ? "เริ่ม / จบ" : "Start / end"}</option>
+                              <option value="database">{lang === "th" ? "ฐานข้อมูล" : "Database"}</option>
                             </select>
 
                             <input
@@ -527,64 +430,58 @@ export default function ChartWizardModal({
                                 updated[idx].label = e.target.value;
                                 setFlowNodes(updated);
                               }}
-                              className="flex-1 bg-neutral-900 border border-neutral-700/80 rounded-lg px-2.5 py-1 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
-                              placeholder="ข้อความในโหนด..."
+                              className="col-start-2 col-span-2 row-start-2 min-w-0 w-full sm:col-auto sm:row-auto sm:flex-1 bg-neutral-900 border border-neutral-700/80 rounded-md px-2.5 py-1 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+                              placeholder={lang === "th" ? "ข้อความในขั้นตอน" : "Step label"}
                             />
 
                             <button
                               type="button"
-                              onClick={() => setFlowNodes(flowNodes.filter((_, i) => i !== idx))}
+                              onClick={() => {
+                                const remaining = flowNodes.filter((_, itemIndex) => itemIndex !== idx);
+                                setFlowNodes(remaining.map(item => ({
+                                  ...item,
+                                  branches: item.branches?.map(branch => branch.targetId === node.id
+                                    ? { ...branch, targetId: remaining.find(target => target.id !== item.id)?.id || item.id }
+                                    : branch),
+                                })));
+                              }}
                               disabled={flowNodes.length <= 2}
-                              className="p-1 text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
+                              className="col-start-3 row-start-1 sm:col-auto sm:row-auto p-1 text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
-                          {/* Decision Diamond Branching Controls */}
-                          {node.shape === "diamond" && (
-                            <div className="pl-8 pt-1 text-[11px] text-neutral-400 space-y-1.5 border-t border-neutral-800/60">
-                              <span className="font-semibold text-indigo-400">
-                                ↳ กิ่งเงื่อนไขตัดสินใจ (Decision Branches):
+                          {node.shape === "diamond" && node.branches && (
+                            <div className="space-y-2 border-t border-[#222634] pt-3 sm:pl-8">
+                              <span className="text-[11px] font-medium text-neutral-400">
+                                {lang === "th" ? "ทางแยก" : "Branches"}
                               </span>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-emerald-400 font-mono">Yes:</span>
-                                  <input
-                                    type="text"
-                                    value={node.branches?.[1]?.label || "ถูกต้อง (Yes)"}
-                                    onChange={(e) => {
-                                      const updated = [...flowNodes];
-                                      if (!updated[idx].branches) updated[idx].branches = [];
-                                      if (!updated[idx].branches![1]) {
-                                        updated[idx].branches![1] = { targetId: "End", label: e.target.value };
-                                      } else {
-                                        updated[idx].branches![1].label = e.target.value;
-                                      }
-                                      setFlowNodes(updated);
-                                    }}
-                                    className="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-[11px] text-neutral-200 w-full"
-                                  />
+                              {node.branches.map((branch, branchIndex) => (
+                                <div key={`${node.id}-${branchIndex}`} className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
+                                  <span className="font-mono text-[11px] text-neutral-400">
+                                    {branchIndex === 0 ? (lang === "th" ? "ไม่" : "No") : (lang === "th" ? "ใช่" : "Yes")}
+                                  </span>
+                                  <input type="text" value={branch.label || ""}
+                                    aria-label={lang === "th" ? "ข้อความทางแยก" : "Branch label"}
+                                    onChange={event => setFlowNodes(flowNodes.map((item, itemIndex) => itemIndex === idx ? {
+                                      ...item,
+                                      branches: item.branches?.map((entry, entryIndex) => entryIndex === branchIndex ? { ...entry, label: event.target.value } : entry),
+                                    } : item))}
+                                    className="min-w-0 rounded border border-[#222634] bg-[#161922] px-2 py-1 text-xs text-neutral-200" />
+                                  <span className="text-[10px] text-neutral-500">→</span>
+                                  <select value={branch.targetId} aria-label={lang === "th" ? "ปลายทางทางแยก" : "Branch target"}
+                                    onChange={event => setFlowNodes(flowNodes.map((item, itemIndex) => itemIndex === idx ? {
+                                      ...item,
+                                      branches: item.branches?.map((entry, entryIndex) => entryIndex === branchIndex ? { ...entry, targetId: event.target.value } : entry),
+                                    } : item))}
+                                    className="min-w-0 rounded border border-[#222634] bg-[#161922] px-2 py-1 text-xs text-neutral-200">
+                                    {flowNodes.filter(target => target.id !== node.id).map(target => (
+                                      <option key={target.id} value={target.id}>{target.label || target.id}</option>
+                                    ))}
+                                  </select>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-rose-400 font-mono">No:</span>
-                                  <input
-                                    type="text"
-                                    value={node.branches?.[0]?.label || "ไม่ถูกต้อง (No)"}
-                                    onChange={(e) => {
-                                      const updated = [...flowNodes];
-                                      if (!updated[idx].branches) updated[idx].branches = [];
-                                      if (!updated[idx].branches![0]) {
-                                        updated[idx].branches![0] = { targetId: "Alert", label: e.target.value };
-                                      } else {
-                                        updated[idx].branches![0].label = e.target.value;
-                                      }
-                                      setFlowNodes(updated);
-                                    }}
-                                    className="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-[11px] text-neutral-200 w-full"
-                                  />
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -666,9 +563,9 @@ export default function ChartWizardModal({
                         </button>
                       </div>
 
-                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      <div className="space-y-2 ">
                         {seqMessages.map((msg, idx) => (
-                          <div key={idx} className="flex items-center gap-2 p-2 bg-neutral-950 border border-neutral-800 rounded-xl">
+                          <div key={idx} className="grid grid-cols-3 items-center gap-2 border-b border-[#222634] py-2 sm:flex">
                             <select
                               value={msg.from}
                               onChange={(e) => {
@@ -676,7 +573,7 @@ export default function ChartWizardModal({
                                 updated[idx].from = e.target.value;
                                 setSeqMessages(updated);
                               }}
-                              className="bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
+                              className="min-w-0 w-full bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
                             >
                               {seqParticipants.map((p) => (
                                 <option key={p.id} value={p.id}>
@@ -692,7 +589,7 @@ export default function ChartWizardModal({
                                 updated[idx].type = e.target.value as SequenceMessage["type"];
                                 setSeqMessages(updated);
                               }}
-                              className="bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
+                              className="min-w-0 w-full bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
                             >
                               <option value="solid">→ (Request)</option>
                               <option value="dotted">⇢ (Response)</option>
@@ -706,7 +603,7 @@ export default function ChartWizardModal({
                                 updated[idx].to = e.target.value;
                                 setSeqMessages(updated);
                               }}
-                              className="bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
+                              className="min-w-0 w-full bg-neutral-900 border border-neutral-700/80 rounded px-1.5 py-1 text-xs text-neutral-300"
                             >
                               {seqParticipants.map((p) => (
                                 <option key={p.id} value={p.id}>
@@ -723,7 +620,7 @@ export default function ChartWizardModal({
                                 updated[idx].text = e.target.value;
                                 setSeqMessages(updated);
                               }}
-                              className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-200"
+                              className="col-span-2 min-w-0 w-full sm:flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-200"
                               placeholder="Message label..."
                             />
 
@@ -731,7 +628,7 @@ export default function ChartWizardModal({
                               type="button"
                               onClick={() => setSeqMessages(seqMessages.filter((_, i) => i !== idx))}
                               disabled={seqMessages.length <= 1}
-                              className="text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
+                              className="justify-self-end text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -746,7 +643,7 @@ export default function ChartWizardModal({
                 {visualType === "bar" && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
                           {lang === "th" ? "ชนิดกราฟ" : "Mode"}:
                         </label>
@@ -757,7 +654,7 @@ export default function ChartWizardModal({
                             chartMode === "bar" ? "bg-indigo-600 text-white" : "bg-neutral-900 text-neutral-400"
                           }`}
                         >
-                          แท่ง (Bar)
+                          {lang === "th" ? "แท่ง" : "Bar"}
                         </button>
                         <button
                           type="button"
@@ -766,7 +663,7 @@ export default function ChartWizardModal({
                             chartMode === "line" ? "bg-indigo-600 text-white" : "bg-neutral-900 text-neutral-400"
                           }`}
                         >
-                          เส้น (Line)
+                          {lang === "th" ? "เส้น" : "Line"}
                         </button>
                         <button
                           type="button"
@@ -775,7 +672,7 @@ export default function ChartWizardModal({
                             chartMode === "both" ? "bg-indigo-600 text-white" : "bg-neutral-900 text-neutral-400"
                           }`}
                         >
-                          ทั้งคู่ (Both)
+                          {lang === "th" ? "ทั้งคู่" : "Both"}
                         </button>
                       </div>
 
@@ -785,7 +682,7 @@ export default function ChartWizardModal({
                           const nextIdx = chartItems.length + 1;
                           setChartItems([
                             ...chartItems,
-                            { label: `รายการ ${nextIdx}`, value: 50, lineValue: 45 },
+                            { label: lang === "th" ? `รายการ ${nextIdx}` : `Item ${nextIdx}`, value: 50, lineValue: 45 },
                           ]);
                         }}
                         className="flex items-center gap-1 text-xs text-indigo-400 font-medium cursor-pointer"
@@ -795,9 +692,9 @@ export default function ChartWizardModal({
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-2 ">
                       {chartItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex flex-wrap items-center gap-2 border-b border-[#222634] py-2 sm:border-0 sm:py-0">
                           <input
                             type="text"
                             value={item.label}
@@ -806,7 +703,7 @@ export default function ChartWizardModal({
                               updated[idx].label = e.target.value;
                               setChartItems(updated);
                             }}
-                            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-200"
+                            className="min-w-0 basis-full sm:basis-auto sm:flex-1 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-xs text-neutral-200"
                             placeholder="Label"
                           />
                           <input
@@ -858,7 +755,7 @@ export default function ChartWizardModal({
                         type="button"
                         onClick={() => {
                           const nextIdx = pieItems.length + 1;
-                          setPieItems([...pieItems, { label: `หมวดหมู่ ${nextIdx}`, value: 20 }]);
+                          setPieItems([...pieItems, { label: lang === "th" ? `หมวดหมู่ ${nextIdx}` : `Category ${nextIdx}`, value: 20 }]);
                         }}
                         className="flex items-center gap-1 text-xs text-indigo-400 font-medium cursor-pointer"
                       >
@@ -867,9 +764,9 @@ export default function ChartWizardModal({
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-2 ">
                       {pieItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex flex-wrap items-center gap-2 border-b border-[#222634] py-2 sm:border-0 sm:py-0">
                           <input
                             type="text"
                             value={item.label}
@@ -878,7 +775,7 @@ export default function ChartWizardModal({
                               updated[idx].label = e.target.value;
                               setPieItems(updated);
                             }}
-                            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-200"
+                            className="min-w-0 basis-full sm:basis-auto sm:flex-1 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-xs text-neutral-200"
                           />
                           <input
                             type="number"
@@ -915,7 +812,7 @@ export default function ChartWizardModal({
                         type="text"
                         value={mindmapRoot}
                         onChange={(e) => setMindmapRoot(e.target.value)}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-neutral-200"
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-xs text-neutral-200"
                       />
                     </div>
 
@@ -928,7 +825,7 @@ export default function ChartWizardModal({
                         onClick={() => {
                           setMindmapBranches([
                             ...mindmapBranches,
-                            { label: "ประเด็นหลักใหม่", subBranches: ["ประเด็นย่อย"] },
+                            { label: lang === "th" ? "ประเด็นใหม่" : "New branch", subBranches: [lang === "th" ? "ประเด็นย่อย" : "Subtopic"] },
                           ]);
                         }}
                         className="flex items-center gap-1 text-xs text-indigo-400 font-medium cursor-pointer"
@@ -938,9 +835,9 @@ export default function ChartWizardModal({
                       </button>
                     </div>
 
-                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-3 ">
                       {mindmapBranches.map((b, idx) => (
-                        <div key={idx} className="p-3 bg-neutral-950 border border-neutral-800 rounded-xl space-y-2">
+                        <div key={idx} className="border-b border-[#222634] py-3 space-y-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-indigo-400 font-bold">●</span>
                             <input
@@ -958,12 +855,12 @@ export default function ChartWizardModal({
                               onClick={() => {
                                 const updated = [...mindmapBranches];
                                 if (!updated[idx].subBranches) updated[idx].subBranches = [];
-                                updated[idx].subBranches!.push("กิ่งย่อยใหม่");
+                                updated[idx].subBranches!.push(lang === "th" ? "ประเด็นย่อย" : "Subtopic");
                                 setMindmapBranches(updated);
                               }}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium px-2 py-0.5 rounded bg-indigo-500/10 cursor-pointer"
                             >
-                              + กิ่งย่อย
+                              {lang === "th" ? "+ ประเด็นย่อย" : "+ Subtopic"}
                             </button>
                             <button
                               type="button"
@@ -1033,9 +930,9 @@ export default function ChartWizardModal({
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-2 ">
                       {stateTransitions.map((t, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 bg-neutral-950 border border-neutral-800 rounded-xl">
+                        <div key={idx} className="grid grid-cols-[6rem_auto_6rem_1.25rem] items-center gap-2 border-b border-[#222634] py-2 sm:flex">
                           <input
                             type="text"
                             value={t.from}
@@ -1067,14 +964,14 @@ export default function ChartWizardModal({
                               updated[idx].label = e.target.value;
                               setStateTransitions(updated);
                             }}
-                            className="flex-1 bg-neutral-900 border border-neutral-700/80 rounded px-2 py-1 text-xs text-neutral-200"
+                            className="col-span-4 row-start-2 min-w-0 w-full sm:col-auto sm:row-auto sm:flex-1 bg-neutral-900 border border-neutral-700/80 rounded px-2 py-1 text-xs text-neutral-200"
                             placeholder="Label (Action)"
                           />
                           <button
                             type="button"
                             onClick={() => setStateTransitions(stateTransitions.filter((_, i) => i !== idx))}
                             disabled={stateTransitions.length <= 1}
-                            className="text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
+                            className="col-start-4 row-start-1 sm:col-auto sm:row-auto text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1086,46 +983,22 @@ export default function ChartWizardModal({
               </>
             )}
 
-            {/* 2. TEMPLATES GALLERY TAB */}
+            {/* Templates are selectable rows so the title and purpose remain scannable. */}
             {activeTab === "templates" && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">
-                    {lang === "th" ? "คลังแม่แบบสำเร็จรูประดับมืออาชีพ" : "Curated Professional Templates"}
-                  </h3>
-                  <p className="text-xs text-neutral-400">
-                    {lang === "th"
-                      ? "คลิกเลือกแม่แบบเพื่อดูพรีวิวสด และนำไปใช้หรือแก้ไขต่อได้ทันที"
-                      : "Pick any template to inspect live and customize in the editor."}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-                  {DIAGRAM_TEMPLATES.map((tmpl) => (
-                    <div
-                      key={tmpl.id}
-                      onClick={() => handleSelectTemplate(tmpl)}
-                      className="group p-4 rounded-2xl border border-neutral-800 bg-neutral-950/60 hover:bg-neutral-900/90 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-neutral-800 text-neutral-300 border border-neutral-700/60">
-                            {tmpl.badge}
-                          </span>
-                          <span className="text-[11px] font-semibold text-indigo-400 group-hover:translate-x-0.5 transition-transform">
-                            เลือกแม่แบบ →
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-neutral-200 mb-1 group-hover:text-indigo-300 transition-colors">
-                          {tmpl.name[lang]}
-                        </h4>
-                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                          {tmpl.description[lang]}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-1">
+                <p className="mb-3 text-xs text-neutral-400">
+                  {lang === "th" ? "เลือกแม่แบบเพื่อดูผล แล้วแก้ Mermaid ได้ต่อ" : "Choose a template to preview and edit its Mermaid source."}
+                </p>
+                {DIAGRAM_TEMPLATES.map((template) => (
+                  <button key={template.id} type="button" onClick={() => handleSelectTemplate(template)}
+                    className="group flex w-full items-start justify-between gap-3 border-b border-[#222634] px-2 py-3 text-left hover:bg-neutral-800/50 focus-visible:outline-2 focus-visible:outline-indigo-500">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-neutral-100">{template.name[lang]}</span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-neutral-400">{template.description[lang]}</span>
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-neutral-500">{template.badge}</span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -1148,52 +1021,47 @@ export default function ChartWizardModal({
                   </button>
                 </div>
 
-                <div className="flex-1 flex flex-col relative rounded-2xl overflow-hidden border border-neutral-800 bg-neutral-950">
+                <div className="flex-1 flex flex-col relative rounded-md overflow-hidden border border-[#222634] bg-[#161922]">
                   <textarea
+                    aria-label={lang === "th" ? "โค้ด Mermaid" : "Mermaid source"}
                     value={customCode}
                     onChange={(e) => setCustomCode(e.target.value)}
                     className="w-full flex-1 p-4 font-mono text-xs text-neutral-200 bg-transparent focus:outline-none resize-none leading-relaxed"
                     placeholder="Enter Mermaid diagram syntax..."
                     spellCheck={false}
                   />
-                  <div className="px-4 py-2 bg-neutral-900/80 border-t border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-                    <span>Mermaid v12.0 • Real-time Validation</span>
-                    <span>{customCode.split("\n").length} Lines</span>
+                  <div className="px-4 py-2 border-t border-[#222634] text-right text-[11px] text-neutral-400 font-mono">
+                    {customCode.split("\n").length} {lang === "th" ? "บรรทัด" : "lines"}
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right Column: Live Interactive Vector Preview */}
-          <div className="lg:col-span-6 flex flex-col bg-neutral-950 p-6 overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-800/80 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1 rounded-lg bg-indigo-500/20 text-indigo-400">
-                  <Eye className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-bold text-neutral-200">
-                  {lang === "th" ? "พรีวิวสดเวกเตอร์ (Pure Vector Preview)" : "Live Vector Preview"}
-                </span>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Interactive Canvas
+          <div className={`${mobilePanel === "edit" ? "hidden lg:flex" : "flex"} lg:col-span-6 min-h-0 flex-col bg-[#090a0f] p-4 sm:p-5 overflow-y-auto`}>
+            <div className="flex items-center justify-between border-b border-[#222634] pb-3 text-xs">
+              <span className="font-medium text-neutral-200">{lang === "th" ? "พรีวิว" : "Preview"}</span>
+              <span role="status" className={previewState === "ready" ? "text-emerald-400" : previewState === "invalid" ? "text-rose-400" : "text-neutral-500"}>
+                {previewState === "ready" ? (lang === "th" ? "พร้อมแทรก" : "Ready")
+                  : previewState === "invalid" ? (lang === "th" ? "แก้โค้ดก่อนแทรก" : "Fix code before inserting")
+                  : previewState === "empty" ? (lang === "th" ? "ใส่โค้ด Mermaid" : "Enter Mermaid code")
+                  : (lang === "th" ? "กำลังแสดงผล" : "Rendering")}
               </span>
             </div>
 
-            {/* Live Chart Canvas */}
-            <div className="flex-1 flex items-center justify-center overflow-hidden">
-              <MermaidChart chart={activeMermaidCode} />
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {hasCode ? <MermaidChart chart={activeMermaidCode} studio onValidationChange={handleValidationChange} /> :
+                <p className="px-2 py-12 text-center text-xs text-neutral-500">{lang === "th" ? "พิมพ์โค้ด Mermaid เพื่อดูแผนภาพ" : "Write Mermaid code to preview the diagram."}</p>}
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-800 bg-neutral-950/80">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-5 border-t border-[#222634] bg-[#0f1117]">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 cursor-pointer"
+            className="px-2 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-indigo-500"
           >
             {lang === "th" ? "ยกเลิก" : "Cancel"}
           </button>
@@ -1202,10 +1070,11 @@ export default function ChartWizardModal({
             <button
               type="button"
               onClick={handleInsert}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+              disabled={!canInsert}
+              className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
             >
               <Check className="w-4 h-4" />
-              <span>{lang === "th" ? "แทรกลงในโน้ต (Insert into Note)" : "Insert into Note"}</span>
+              <span>{lang === "th" ? "แทรกในโน้ต" : "Insert into note"}</span>
             </button>
           </div>
         </div>

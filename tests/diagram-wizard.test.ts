@@ -51,6 +51,44 @@ test("generateFlowchart produces valid syntax with decision branches and custom 
   assert.match(chart, /Check -->\|"ไม่ผ่าน"\| Fail/);
 });
 
+test("flowchart connects steps around a decision without joining sibling outcomes", () => {
+  const chart = generateFlowchart({
+    direction: "TD",
+    nodes: [
+      { id: "Start", label: "Start", shape: "round" },
+      { id: "Input", label: "Input", shape: "rect" },
+      { id: "Check", label: "Check", shape: "diamond", branches: [
+        { targetId: "Reject", label: "No" },
+        { targetId: "Accept", label: "Yes" },
+      ] },
+      { id: "Reject", label: "Reject", shape: "rect" },
+      { id: "Accept", label: "Accept", shape: "rect" },
+      { id: "End", label: "End", shape: "round" },
+    ],
+  });
+  assert.match(chart, /Start --> Input/);
+  assert.match(chart, /Input --> Check/);
+  assert.match(chart, /Check -->\|"No"\| Reject/);
+  assert.match(chart, /Check -->\|"Yes"\| Accept/);
+  assert.doesNotMatch(chart, /Reject --> Accept/);
+  assert.match(chart, /Accept --> End/);
+});
+
+test("flowchart ignores branch targets that no longer exist", () => {
+  const chart = generateFlowchart({
+    direction: "LR",
+    nodes: [
+      { id: "Check", label: "Check", shape: "diamond", branches: [
+        { targetId: "Missing", label: "Old" },
+        { targetId: "End", label: "Yes" },
+      ] },
+      { id: "End", label: "End", shape: "round" },
+    ],
+  });
+  assert.doesNotMatch(chart, /Missing/);
+  assert.match(chart, /Check -->\|"Yes"\| End/);
+});
+
 test("generateSequenceDiagram produces valid sequence with participants and arrow types", () => {
   const chart = generateSequenceDiagram({
     title: "API Flow",
