@@ -15,6 +15,7 @@ import {
   Key,
   Keyboard,
   RotateCcw,
+  ShieldCheck,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Language, I18N_MAIN } from "@/lib/i18n";
@@ -72,7 +73,7 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const t = I18N_MAIN[lang] || I18N_MAIN.en;
   const [activeTab, setActiveTab] = useState<"general" | "shortcuts" | "account" | "data" | "mcp">("general");
-  const [activeConfigTab, setActiveConfigTab] = useState<"claude" | "cursor">("claude");
+  const [activeConfigTab, setActiveConfigTab] = useState<"oauth" | "cursor" | "claude">("oauth");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
 
   // Keyboard shortcuts state
@@ -399,6 +400,20 @@ export default function SettingsModal({
 
   if (!isOpen) return null;
 
+  const mcpServerUrl = `${typeof window === "undefined" ? "https://your-nota-domain.example" : window.location.origin}/api/mcp`;
+
+  const oauthConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "nota-vault": {
+          url: mcpServerUrl,
+        },
+      },
+    },
+    null,
+    2
+  );
+
   const claudeConfig = JSON.stringify(
     {
       mcpServers: {
@@ -417,7 +432,7 @@ export default function SettingsModal({
     {
       mcpServers: {
         "nota-vault": {
-          url: `${typeof window === "undefined" ? "https://your-nota-domain.example" : window.location.origin}/api/mcp`,
+          url: mcpServerUrl,
           headers: { Authorization: `Bearer ${apiKey || "PASTE_YOUR_MCP_KEY"}` },
         },
       },
@@ -425,6 +440,13 @@ export default function SettingsModal({
     null,
     2
   );
+
+  const activeConfigText =
+    activeConfigTab === "oauth"
+      ? oauthConfig
+      : activeConfigTab === "claude"
+      ? claudeConfig
+      : cursorConfig;
 
   const handleCopy = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -933,9 +955,9 @@ export default function SettingsModal({
                 {/* Status Header */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-neutral-950/40 border border-neutral-800">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-neutral-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50" />
                     <span className="text-sm font-semibold text-neutral-200">
-                      MCP Transport: <span className="text-neutral-300 font-medium">stdio / Streamable HTTP</span>
+                      MCP Transport: <span className="text-neutral-300 font-medium">OAuth 2.0 PKCE / Streamable HTTP</span>
                     </span>
                   </div>
                   <span className="text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-750 px-2.5 py-1 rounded-md">
@@ -943,13 +965,149 @@ export default function SettingsModal({
                   </span>
                 </div>
 
-                {/* User ID & Key Management */}
+                {/* 1-Click OAuth Connect Card */}
+                <div className="p-5 rounded-xl bg-gradient-to-b from-indigo-950/30 to-neutral-950/40 border border-indigo-800/40 space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold text-neutral-100">
+                            1-Click OAuth Connect
+                          </h4>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Recommended
+                          </span>
+                        </div>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          เชื่อมต่อ AI Client ทันทีด้วย OAuth 2.0 PKCE ปลอดภัย ไม่ต้องก๊อปปี้ API Key
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-neutral-300 flex items-center justify-between">
+                      <span>MCP Server URL</span>
+                      <span className="text-neutral-500 font-mono text-[11px]">Streamable HTTP + RFC 8414 Discovery</span>
+                    </label>
+                    <div className="flex items-center gap-2 p-2 bg-neutral-900 border border-neutral-750 rounded-lg">
+                      <span className="font-mono text-xs text-neutral-200 truncate flex-1 select-all px-1">
+                        {mcpServerUrl}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(mcpServerUrl, "mcp-url")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium transition-colors shrink-0 cursor-pointer shadow-xs"
+                      >
+                        {copiedConfig === "mcp-url" ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy Server URL</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-neutral-400 pt-1">
+                    <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-lg p-3 space-y-1">
+                      <div className="font-semibold text-neutral-200">Cursor IDE</div>
+                      <p className="text-[11px] leading-relaxed">
+                        Settings &gt; Features &gt; MCP &gt; Add Server &gt; Type: HTTP / SSE &gt; Paste URL ด้านบน แล้วกด Connect
+                      </p>
+                    </div>
+                    <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-lg p-3 space-y-1">
+                      <div className="font-semibold text-neutral-200">Claude Desktop / ChatGPT</div>
+                      <p className="text-[11px] leading-relaxed">
+                        ใส่ URL ใน config แล้วเปิด Claude จะมีหน้าต่างเบราว์เซอร์เด้งขึ้นมาให้กดยืนยัน (Authorize) เพียง 1 คลิก
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Configuration Snippets */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => setActiveConfigTab("oauth")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                          activeConfigTab === "oauth"
+                            ? "bg-neutral-800 text-white font-semibold"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        OAuth (1-Click)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveConfigTab("cursor")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                          activeConfigTab === "cursor"
+                            ? "bg-neutral-800 text-white font-semibold"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        Cursor (Bearer Key)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveConfigTab("claude")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                          activeConfigTab === "claude"
+                            ? "bg-neutral-800 text-white font-semibold"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        }`}
+                      >
+                        Claude (stdio)
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(activeConfigText, activeConfigTab)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-neutral-700"
+                    >
+                      {copiedConfig === activeConfigTab ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Config</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <pre className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 font-mono text-xs text-neutral-300 overflow-x-auto leading-relaxed">
+                    {activeConfigText}
+                  </pre>
+                  <p className="text-xs text-neutral-400 font-mono">
+                    {activeConfigTab === "oauth"
+                      ? "ไม่ต้องระบุ Token ใน Config เพราะระบบจะทำ PKCE OAuth Handshake และขอ Token อัตโนมัติ"
+                      : activeConfigTab === "cursor"
+                      ? "โหมด HTTPS Bearer Key แนะนำให้สร้าง Key ด้านล่างแล้วนำมาใส่ใน Config"
+                      : "โหมด stdio สำหรับรันแบบ Local Node.js script"}
+                  </p>
+                </div>
+
+                {/* Manual Key Management */}
                 <div className="p-5 rounded-xl bg-neutral-950/40 border border-neutral-800 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2.5">
                       <Key className="w-4 h-4 text-neutral-400" />
                       <span className="text-sm font-semibold text-neutral-200">
-                        Connection Credential
+                        Manual API Key Management (Fallback)
                       </span>
                     </div>
                     <button
@@ -968,7 +1126,7 @@ export default function SettingsModal({
                   </div>
 
                   <p className="text-xs text-neutral-400 leading-relaxed">
-                    คัดลอก key ตอนนี้เท่านั้น ระบบเก็บเพียง hash และจะไม่แสดง key เดิมอีก
+                    ใช้เฉพาะเมื่อต้องการต่อแบบ manual ผ่าน Stdio หรือ Script ส่วนตัว คัดลอก key ทันทีหลังจากสร้าง
                   </p>
 
                   {keyError && <p role="alert" className="text-xs text-red-300">{keyError}</p>}
@@ -992,66 +1150,6 @@ export default function SettingsModal({
                       <button type="button" onClick={() => handleRevokeKey(item.id)} className="text-red-300 hover:text-red-200">Revoke</button>
                     </div>
                   ))}
-                </div>
-
-                {/* Configuration Snippets */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800">
-                      <button
-                        type="button"
-                        onClick={() => setActiveConfigTab("claude")}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                          activeConfigTab === "claude"
-                            ? "bg-neutral-800 text-white font-semibold"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        Claude Desktop
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveConfigTab("cursor")}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                          activeConfigTab === "cursor"
-                            ? "bg-neutral-800 text-white font-semibold"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        Cursor IDE
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopy(
-                          activeConfigTab === "claude" ? claudeConfig : cursorConfig,
-                          activeConfigTab
-                        )
-                      }
-                      className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-neutral-700"
-                    >
-                      {copiedConfig === activeConfigTab ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy Config</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <pre className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 font-mono text-xs text-neutral-300 overflow-x-auto leading-relaxed">
-                    {activeConfigTab === "claude" ? claudeConfig : cursorConfig}
-                  </pre>
-                  <p className="text-xs text-neutral-400 font-mono">
-                    Claude uses local stdio; Cursor example uses HTTPS. Replace the path with your local checkout. Keep the key private.
-                  </p>
                 </div>
 
                 {/* Tools Listing Table */}
