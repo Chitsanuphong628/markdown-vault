@@ -22,14 +22,9 @@ interface UserInfo {
   emailVerified?: boolean;
 }
 
-function formatClientName(clientId: string): string {
-  if (!clientId) return "AI Assistant";
-  const cleaned = clientId
-    .replace(/^nota_/, "")
-    .replace(/_[a-f0-9]{8}$/i, "")
-    .replace(/[-_]/g, " ");
-  if (!cleaned) return clientId;
-  return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+interface ClientInfo {
+  client_name: string;
+  redirect_uris: string[];
 }
 
 function AuthorizeContent() {
@@ -44,30 +39,31 @@ function AuthorizeContent() {
   const scope = searchParams.get("scope") || "mcp";
 
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [client, setClient] = useState<ClientInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const clientDisplayName = formatClientName(clientId);
+  const clientDisplayName = client?.client_name ?? "AI client";
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchContext = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user || null);
-        } else {
-          setUser(null);
-        }
+        const [userResponse, clientResponse] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch(`/api/oauth/client?client_id=${encodeURIComponent(clientId)}`, { cache: "no-store" }),
+        ]);
+        setUser(userResponse.ok ? (await userResponse.json()).user || null : null);
+        setClient(clientResponse.ok ? await clientResponse.json() : null);
       } catch {
         setUser(null);
+        setClient(null);
       } finally {
         setLoading(false);
       }
     };
-    fetchUser();
-  }, []);
+    fetchContext();
+  }, [clientId]);
 
   const handleDecision = async (decision: "allow" | "deny") => {
     setSubmitting(true);
@@ -81,6 +77,7 @@ function AuthorizeContent() {
           redirect_uri: redirectUri,
           code_challenge: codeChallenge,
           code_challenge_method: codeChallengeMethod,
+          response_type: searchParams.get("response_type") || "code",
           state: state || undefined,
           scope,
           decision,
@@ -115,7 +112,7 @@ function AuthorizeContent() {
     );
   }
 
-  if (!clientId || !redirectUri || !codeChallenge) {
+  if (!clientId || !redirectUri || !codeChallenge || !client || !client.redirect_uris.includes(redirectUri)) {
     return (
       <div className="min-h-screen bg-[#0c0c0f] text-neutral-100 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
@@ -124,9 +121,7 @@ function AuthorizeContent() {
           </div>
           <h1 className="text-lg font-bold text-neutral-100">Invalid OAuth Request</h1>
           <p className="text-xs text-neutral-400 leading-relaxed">
-            คำขอเชื่อมต่อ OAuth 2.0 ไม่สมบูรณ์ (ขาดพารามิเตอร์ <code className="text-rose-300">client_id</code>,{" "}
-            <code className="text-rose-300">redirect_uri</code> หรือ{" "}
-            <code className="text-rose-300">code_challenge</code>)
+              คำขอเชื่อมต่อ OAuth 2.0 ไม่สมบูรณ์ หรือ callback ไม่ตรงกับ client ที่ลงทะเบียนไว้
           </p>
           <button
             type="button"
@@ -159,7 +154,7 @@ function AuthorizeContent() {
             type="button"
             onClick={() => {
               const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-              router.push(`/login?returnTo=${returnUrl}`);
+              router.push(`/login?next=${returnUrl}`);
             }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
           >
@@ -193,6 +188,9 @@ function AuthorizeContent() {
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
             บัญชีของคุณ: <span className="text-neutral-200 font-medium">{user.email}</span>
+          </p>
+          <p className="text-[11px] text-neutral-500 mt-2 break-all">
+            ปลายทางหลังอนุญาต: <code>{redirectUri}</code>
           </p>
         </div>
 

@@ -4,9 +4,9 @@ Nota keeps the ten original tool names and serves them through the official MCP 
 
 ## Enable
 
-1. Apply `supabase/migrations/202609240000_mcp_credentials.sql` to the target Supabase project after a backup and test it in a non-production project.
-2. Set `ENABLE_MCP=true` in the app environment. Keep `SUPABASE_SERVICE_ROLE_KEY` on the server only.
-3. Sign in to a verified Nota account, open Settings → MCP, and generate a credential. Copy it immediately. Only its SHA-256 hash is stored. It expires in 90 days. Revoke it from the same page if a client is retired or the key is exposed.
+1. After a backup, apply `supabase/migrations/202609240000_mcp_credentials.sql` and then `supabase/migrations/202609250001_mcp_oauth_state.sql` to a non-production project and validate both before applying them to the target Supabase project.
+2. Set `ENABLE_MCP=true` only after both migrations are applied. Keep `SUPABASE_SERVICE_ROLE_KEY` on the server only.
+3. Sign in to a verified Nota account, open Settings → MCP, and either connect through OAuth or generate a manual credential. A manual credential is shown once; only its SHA-256 hash is stored. It expires in 90 days and can be revoked from the same page.
 
 The old `nota_sec_` JWT and `NOTA_USER_ID` configurations are intentionally rejected. They do not have revocation or safe user binding. Delete them from old client configurations.
 
@@ -36,7 +36,11 @@ The endpoint is stateless. No `Mcp-Session-Id` storage is required. It accepts l
 
 ## Optional OAuth sign-in
 
-For hosts that require OAuth discovery and interactive sign-in, connect an external OAuth authorization server and set all four `MCP_OAUTH_*` variables shown in `.env.example`. The provider must issue JWT access tokens with `iss` matching `MCP_OAUTH_ISSUER`, `aud` equal to the exact `/api/mcp` URL, `sub` equal to a verified Nota `User.id`, and the `mcp` scope. The server verifies signatures through the configured HTTPS JWKS URL and publishes RFC 9728 protected-resource metadata. Do not configure this using an unrelated OAuth provider whose subjects are not Nota user IDs. This repo does not implement an authorization server or an OAuth consent screen.
+With `ENABLE_MCP=true`, Nota publishes OAuth authorization-server and protected-resource metadata for `/api/mcp`. A client that supports MCP OAuth discovery can connect using only `https://your-nota-domain.example/api/mcp`: it registers a public client, opens Nota's consent page, and exchanges a PKCE S256 authorization code for a revocable 90-day MCP credential. Users who are signed out return to the same consent request after login. The client must send a registered `redirect_uri` and its `client_id` during token exchange. Manual MCP keys remain available for clients without this flow.
+
+Apply `supabase/migrations/202609250001_mcp_oauth_state.sql` before enabling the native OAuth flow. It stores client registrations and authorization-code JTIs in Supabase; code redemption atomically removes the JTI so a code cannot be used on another server instance. Apply the earlier MCP credentials migration first. Existing signed-in users can revoke issued credentials from Settings → MCP.
+
+To use an external authorization server instead, set all four `MCP_OAUTH_*` variables shown in `.env.example`. The provider must issue JWT access tokens with `iss` matching `MCP_OAUTH_ISSUER`, `aud` equal to the exact `/api/mcp` URL, `sub` equal to a verified Nota `User.id`, and the `mcp` scope. The server verifies signatures through the configured HTTPS JWKS URL. Do not configure an unrelated OAuth provider whose subjects are not Nota user IDs.
 
 ## Tool behavior
 

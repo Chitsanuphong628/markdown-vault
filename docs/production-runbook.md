@@ -25,4 +25,4 @@
 
 ## MCP release gate
 
-The web folder-delete route now also uses `delete_nota_empty_folder`; apply and validate `202609240000_mcp_credentials.sql` on a restored non-production database **before deploying this code**, even when MCP remains disabled. MCP stays disabled until the migration is applied to production, the MCP tests pass, and the tenant-isolation/security review is complete. Then set `ENABLE_MCP=true`. Keep the old `nota_sec_` JWTs, `NOTA_USER_ID`, and `MCP_JWT_SECRET` disabled. See [MCP setup](mcp.md).
+The web folder-delete route uses `delete_nota_empty_folder`. Apply and validate `202609240000_mcp_credentials.sql` and then `202609250001_mcp_oauth_state.sql` on a restored non-production database **before deploying this code**, even when MCP remains disabled. MCP stays disabled until both migrations are applied to production, the MCP tests pass, and the tenant-isolation/security review is complete. Then set `ENABLE_MCP=true`. Keep the old `nota_sec_` JWTs, `NOTA_USER_ID`, and `MCP_JWT_SECRET` disabled. See [MCP setup](mcp.md).

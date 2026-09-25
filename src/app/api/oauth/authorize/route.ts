@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
-import { issueAuthorizationCode } from "@/lib/mcp/oauth";
+import { findRegisteredClient, issueAuthorizationCode, OAuthRequestError } from "@/lib/mcp/oauth";
 import { rejectCrossOrigin } from "@/lib/security";
 
 const AuthorizeSchema = z.object({
@@ -9,6 +9,7 @@ const AuthorizeSchema = z.object({
   redirect_uri: z.string().min(1),
   code_challenge: z.string().min(1),
   code_challenge_method: z.string().optional().default("S256"),
+  response_type: z.literal("code").optional().default("code"),
   state: z.string().optional(),
   scope: z.string().optional().default("mcp"),
   decision: z.enum(["allow", "deny"]),
@@ -49,19 +50,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid redirect_uri" }, { status: 400 });
   }
 
+  const client = await findRegisteredClient(client_id);
+  if (!client || !client.redirect_uris.includes(redirect_uri)) {
+    return NextResponse.json({ error: "Unregistered client_id or redirect_uri" }, { status: 400 });
+  }
+
   if (decision === "deny") {
     callbackUrl.searchParams.set("error", "access_denied");
     if (state) callbackUrl.searchParams.set("state", state);
     return NextResponse.json({ redirectUrl: callbackUrl.toString() });
   }
 
-  const code = issueAuthorizationCode({
-    userId: user.id,
-    clientId: client_id,
-    redirectUri: redirect_uri,
-    codeChallenge: code_challenge,
-    scope,
-  });
+  let code: string;
+  try {
+    code = await issueAuthorizationCode({
+      userId: user.id,
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
+      scope,
+    });
+  } catch (error) {
+    const invalid = error instanceof OAuthRequestError;
+    return NextResponse.json({ error: invalid ? error.message : "Authorization unavailable" },
+      { status: invalid ? 400 : 503 });
+  }
 
   callbackUrl.searchParams.set("code", code);
   if (state) callbackUrl.searchParams.set("state", state);

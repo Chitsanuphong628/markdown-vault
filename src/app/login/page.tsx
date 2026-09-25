@@ -19,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import LanguageToggle from "@/components/LanguageToggle";
+import { postLoginPath } from "@/lib/auth-redirect";
 
 const I18N = {
   en: {
@@ -106,7 +107,7 @@ export default function LoginPage() {
         throw new Error(data.error || "Login failed");
       }
 
-      router.push("/");
+      router.push(postLoginPath(window.location.search));
       router.refresh();
     } catch (err: any) {
       setError(err.message);
