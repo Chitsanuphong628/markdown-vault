@@ -90,11 +90,19 @@ interface MarkdownViewerProps {
   onUpdateContent?: (newContent: string) => Promise<void>;
   lang?: Language;
   showTitle?: boolean;
+  preview?: boolean;
 }
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   className?: string;
   children?: React.ReactNode;
+  block?: boolean;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] || character);
 }
 
 const highlightCache = new Map<string, string>();
@@ -116,7 +124,7 @@ function getHighlightedSnippet(rawCode: string, language: string): string {
     try {
       highlighted = hljs.highlightAuto(rawCode).value;
     } catch {
-      highlighted = rawCode;
+      highlighted = escapeHtml(rawCode);
     }
   }
 
@@ -128,9 +136,9 @@ function getHighlightedSnippet(rawCode: string, language: string): string {
   return highlighted;
 }
 
-function CodeBlock({ className, children, ...props }: CodeBlockProps) {
+function CodeBlock({ className, children, block = false, ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const isInline = !className;
+  const isInline = !block;
   const rawCode = String(children).replace(/\n$/, "");
   const match = /language-(\w+)/.exec(className || "");
   const language = match ? match[1] : "text";
@@ -162,16 +170,9 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   };
 
   return (
-    <div className="relative group my-5 rounded-2xl overflow-hidden border border-neutral-800 bg-[#1e1e2e] shadow-lg">
-      <div className="flex items-center justify-between px-4 py-2 bg-neutral-900/90 border-b border-neutral-800/80 text-xs font-mono text-neutral-400">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
-          </div>
-          <span className="uppercase tracking-wider font-semibold text-neutral-300 ml-2">{language}</span>
-        </div>
+    <div className="relative group my-5 overflow-hidden rounded-md border border-neutral-800 bg-[#15171d]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 text-xs font-mono text-neutral-400">
+        <span className="uppercase tracking-wider font-semibold text-neutral-300">{language}</span>
         <button
           onClick={handleCopy}
           className="flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-neutral-800 transition-colors text-neutral-300 text-xs cursor-pointer"
@@ -199,7 +200,7 @@ function CodeBlock({ className, children, ...props }: CodeBlockProps) {
   );
 }
 
-export default function MarkdownViewer({ note, onUpdateContent, lang = "en", showTitle = false }: MarkdownViewerProps) {
+export default function MarkdownViewer({ note, onUpdateContent, lang = "en", showTitle = false, preview = false }: MarkdownViewerProps) {
   const t = I18N_MAIN[lang];
   // Synchronize internal content when note changes
   const [prevNoteId, setPrevNoteId] = useState(note.id);
@@ -225,30 +226,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
     return { words, chars, readTimeMinutes };
   }, [cleanContent]);
 
-  // Extract headings for Table of Contents
-  const headings = useMemo(() => {
-    const lines = cleanContent.split("\n");
-    const headingList: HeadingItem[] = [];
-
-    lines.forEach((line) => {
-      const match = line.match(/^(#{1,3})\s+(.*)$/);
-      if (match) {
-        const level = match[1].length;
-        const text = match[2].trim().replace(/[#*`_~]/g, "");
-        const id = text
-          .toLowerCase()
-          .replace(/[^\w\u0E00-\u0E7F\s-]/g, "")
-          .trim()
-          .replace(/\s+/g, "-");
-
-        if (text && id) {
-          headingList.push({ id, text, level });
-        }
-      }
-    });
-
-    return headingList;
-  }, [cleanContent]);
+  const [headings, setHeadings] = useState<HeadingItem[]>([]);
 
   // Handle Precise Checkbox Toggle by Exact Line Number in AST
   const handleToggleExactLine = useCallback((lineNumber: number) => {
@@ -277,6 +255,18 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
   const markdownComponents = useMemo(
     () => ({
       code: CodeBlock,
+      pre: ({ children }: React.HTMLAttributes<HTMLPreElement>) => {
+        const child = React.Children.toArray(children)[0];
+        if (React.isValidElement<CodeBlockProps>(child)) {
+          return <CodeBlock block className={child.props.className}>{child.props.children}</CodeBlock>;
+        }
+        return <pre>{children}</pre>;
+      },
+      img: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+        // Remote images remain at their source; the note contains only the URL.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt={alt || ""} loading="lazy" referrerPolicy="no-referrer" {...props} />
+      ),
       li: ({
         node,
         children,
@@ -288,7 +278,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
         const isTaskItem = className?.includes("task-list-item");
         const lineNumber = node?.position?.start?.line;
 
-        if (isTaskItem && lineNumber) {
+        if (isTaskItem && lineNumber && onUpdateContent && !preview) {
           const modifiedChildren = React.Children.map(children, (child) => {
             if (
               React.isValidElement(child) &&
@@ -331,7 +321,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
         );
       },
     }),
-    [handleToggleExactLine]
+    [handleToggleExactLine, onUpdateContent, preview]
   );
 
   // Memoize ReactMarkdown rendering output so in-document search never triggers expensive re-parsing
@@ -356,6 +346,15 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
   const articleRef = useRef<HTMLElement>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const matchesRef = useRef<HTMLElement[]>([]);
+
+  useEffect(() => {
+    if (preview || !articleRef.current) return;
+    setHeadings(Array.from(articleRef.current.querySelectorAll("h1[id], h2[id], h3[id]")).map(element => ({
+      id: element.id,
+      text: element.textContent || "",
+      level: Number(element.tagName.slice(1)),
+    })));
+  }, [cleanContent, preview]);
 
   // Clear all highlights
   const clearHighlights = () => {
@@ -502,6 +501,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
 
   // Keyboard shortcut for Find in note, Escape, and custom toolbar event
   useEffect(() => {
+    if (preview) return;
     const handleOpenFind = () => {
       setIsFindOpen(true);
       setTimeout(() => {
@@ -528,12 +528,12 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("nota:open-find", handleOpenFind);
     };
-  }, [isFindOpen, findShortcut]);
+  }, [isFindOpen, findShortcut, preview]);
 
   return (
     <div className={`flex-1 flex overflow-hidden min-h-0 relative ${activeTheme.editorBg} transition-colors duration-300`}>
       {/* Floating In-Document Find Bar */}
-      {isFindOpen && (
+      {isFindOpen && !preview && (
         <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-6 z-30 bg-neutral-900 border border-neutral-750 shadow-2xl rounded-xl p-2 flex flex-wrap items-center gap-2 text-xs animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
           <div className="relative flex items-center w-full sm:w-auto">
             <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 pointer-events-none" />
@@ -608,9 +608,9 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
 
       {/* Main Reading & Article Scroll Area */}
       <div className="flex-1 overflow-y-auto min-w-0">
-        <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-9">
+        <div className={`max-w-4xl mx-auto ${preview ? "px-4 py-4 sm:px-6 sm:py-6" : "px-4 py-6 sm:px-8 sm:py-9"}`}>
           {/* Document Header */}
-          <div className="mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-neutral-800/80">
+          {!preview && <div className="mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-neutral-800/80">
             <div className={`flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-neutral-400 ${showTitle ? "mb-3" : ""}`}>
               {note.folder && (
                 <span className="flex items-center gap-1.5 bg-neutral-800/80 px-2.5 py-1 rounded-md text-neutral-300 font-medium border border-neutral-700/50">
@@ -649,28 +649,17 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
                 {note.title}
               </h1>
             )}
-          </div>
+          </div>}
 
         {/* Markdown Render Area */}
-        <article ref={articleRef} className="prose prose-invert prose-neutral max-w-none
-          [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-8 [&>h1]:mb-4 [&>h1]:pb-2 [&>h1]:border-b [&>h1]:border-neutral-800
-          [&>h2]:text-2xl [&>h2]:font-semibold [&>h2]:mt-8 [&>h2]:mb-3 [&>h2]:pb-1.5 [&>h2]:border-b [&>h2]:border-neutral-800/60
-          [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:mt-6 [&>h3]:mb-2
-          [&>p]:text-neutral-300 [&>p]:leading-relaxed [&>p]:mb-4
-          [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-4 [&>ul]:space-y-1.5 [&>ul]:text-neutral-300
-          [&>ol]:list-decimal [&>ol]:pl-6 [&>ol]:mb-4 [&>ol]:space-y-1.5 [&>ol]:text-neutral-300
-          [&>blockquote]:border-l-4 [&>blockquote]:border-indigo-500/60 [&>blockquote]:pl-4 [&>blockquote]:py-1 [&>blockquote]:my-4 [&>blockquote]:text-neutral-400 [&>blockquote]:italic [&>blockquote]:bg-indigo-950/20 [&>blockquote]:rounded-r-lg
-          [&>table]:w-full [&>table]:my-6 [&>table]:border-collapse [&>table]:border [&>table]:border-neutral-800
-          [&_th]:border [&_th]:border-neutral-800 [&_th]:px-4 [&_th]:py-2.5 [&_th]:bg-neutral-900 [&_th]:text-neutral-200 [&_th]:text-left [&_th]:font-semibold
-          [&_td]:border [&_td]:border-neutral-800 [&_td]:px-4 [&_td]:py-2 [&_td]:text-neutral-300
-          [&>hr]:border-neutral-800 [&>hr]:my-8">
+        <article ref={articleRef} className="nota-markdown">
           {renderedMarkdown}
         </article>
         </div>
       </div>
 
       {/* Dynamic Table of Contents */}
-      <TableOfContents headings={headings} lang={lang} />
+      {!preview && <TableOfContents headings={headings} lang={lang} />}
     </div>
   );
 }

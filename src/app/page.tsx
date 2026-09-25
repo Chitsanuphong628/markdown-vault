@@ -16,25 +16,24 @@ import {
   Check,
   Globe,
   Lock,
-  Sparkles,
   Search,
   Menu,
   BarChart2,
   Palette,
-  Code,
 } from "lucide-react";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
 import { NoteWriteCoordinator, type NotePatch, type EditableNote } from "@/lib/noteWriting";
-import type { RichNoteEditorHandle } from "@/components/RichNoteEditor";
+import type { MarkdownNoteEditorHandle } from "@/components/MarkdownNoteEditor";
+import { isNoteDraftDirty } from "@/lib/markdownEditing";
 
 // Dynamically load heavy components only when opened or required
 const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
 const SettingsModal = dynamic(() => import("@/components/SettingsModal"), { ssr: false });
 const ChartWizardModal = dynamic(() => import("@/components/ChartWizardModal"), { ssr: false });
-const RichNoteEditor = dynamic(() => import("@/components/RichNoteEditor"), {
+const MarkdownNoteEditor = dynamic(() => import("@/components/MarkdownNoteEditor"), {
   ssr: false,
   loading: () => (
     <div className="flex-1 flex flex-col items-center justify-center p-8 text-neutral-400 text-xs gap-2">
@@ -77,10 +76,17 @@ export default function AppHome() {
   const notesRequestIdRef = useRef(0);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const activeNoteIdRef = useRef<string | null>(null);
-  const editorInstanceRef = useRef<RichNoteEditorHandle | null>(null);
+  const editorInstanceRef = useRef<MarkdownNoteEditorHandle | null>(null);
+  const draftTouchedRef = useRef(false);
+  const draftVersionRef = useRef(0);
+  const markDraftTouched = () => {
+    draftTouchedRef.current = true;
+    draftVersionRef.current += 1;
+  };
   const [isLoadingNote, setIsLoadingNote] = useState(false);
   const selectActiveNote = (id: string | null) => {
     activeNoteIdRef.current = id;
+    draftTouchedRef.current = false;
     setActiveNoteId(id);
     if (id && !noteWrites.getNote(id)) {
       setIsLoadingNote(true);
@@ -117,6 +123,29 @@ export default function AppHome() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
+  const isDraftDirty = Boolean(isEditing && activeNote && isNoteDraftDirty(activeNote, { title: editTitle, content: editContent }));
+  const confirmDiscardDraft = () => !isDraftDirty || window.confirm(
+    lang === "th" ? "มีการแก้ไขที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขหรือไม่?" : "Discard unsaved changes?",
+  );
+  const cancelEditing = () => {
+    if (!confirmDiscardDraft()) return;
+    draftTouchedRef.current = false;
+    if (activeNote) {
+      setEditTitle(activeNote.title);
+      setEditContent(activeNote.content);
+    }
+    setIsEditing(false);
+  };
+
+  useEffect(() => {
+    if (!isDraftDirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = true;
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDraftDirty]);
 
   // Share state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -135,9 +164,6 @@ export default function AppHome() {
   // Chart Wizard & Color Picker state
   const [isChartWizardOpen, setIsChartWizardOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-
-  // Editor mode state (Visual WYSIWYG vs Raw Markdown)
-  const [editorMode, setEditorMode] = useState<"visual" | "markdown">("visual");
 
   // Keyboard shortcuts state
   const [shortcuts, setShortcuts] = useState(() => getShortcuts());
@@ -272,8 +298,10 @@ export default function AppHome() {
     const cached = noteWrites.getNote(activeNoteId);
     if (cached) {
       setActiveNote(cached);
-      setEditTitle(cached.title);
-      setEditContent(cached.content);
+      if (!draftTouchedRef.current) {
+        setEditTitle(cached.title);
+        setEditContent(cached.content);
+      }
       setIsShared(Boolean((cached as any).isShared));
       setIsLoadingNote(false);
     } else {
@@ -287,8 +315,10 @@ export default function AppHome() {
       .then((data) => {
         if (!cancelled && data.note && noteWrites.observeNote(data.note)) {
           setActiveNote(data.note);
-          setEditTitle(data.note.title);
-          setEditContent(data.note.content);
+          if (!draftTouchedRef.current) {
+            setEditTitle(data.note.title);
+            setEditContent(data.note.content);
+          }
           setIsShared(Boolean(data.note.isShared));
           setIsLoadingNote(false);
         }
@@ -330,6 +360,7 @@ export default function AppHome() {
 
   // Handle Create Note
   const handleCreateNote = async (folderId?: string | null) => {
+    if (!confirmDiscardDraft()) return;
     try {
       const res = await fetch("/api/notes", {
         method: "POST",
@@ -354,18 +385,19 @@ export default function AppHome() {
 
   // Handle Save Note
   const handleSaveNote = async () => {
-    if (!activeNoteId) return;
+    if (!activeNoteId || isSaving) return;
     const targetId = activeNoteId;
-    const currentContent = editorMode === "visual"
-      ? (editorInstanceRef.current?.flush() ?? editContent)
-      : editContent;
+    const savedVersion = draftVersionRef.current;
     setIsSaving(true);
     try {
       await patchNote(targetId, {
         title: editTitle,
-        content: currentContent,
+        content: editContent,
       });
-      if (activeNoteIdRef.current === targetId) setIsEditing(false);
+      if (activeNoteIdRef.current === targetId && draftVersionRef.current === savedVersion) {
+        draftTouchedRef.current = false;
+        setIsEditing(false);
+      }
       await loadNotes();
     } catch (err) {
       console.error(err);
@@ -411,7 +443,8 @@ export default function AppHome() {
       // 4. Toggle Edit/View
       if (matchesShortcut(e, shortcuts.toggleEdit) && activeNote && !isInputFocused) {
         e.preventDefault();
-        setIsEditing((prev) => !prev);
+        if (isEditing) cancelEditing();
+        else setIsEditing(true);
         return;
       }
 
@@ -429,6 +462,7 @@ export default function AppHome() {
 
   // Handle Delete Note
   const handleDeleteNote = async (id: string) => {
+    if (id === activeNoteId && !confirmDiscardDraft()) return;
     try {
       const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -453,6 +487,7 @@ export default function AppHome() {
     if (!activeNoteId || !activeNote) return;
     setIsColorPickerOpen(false);
     if (isEditing) {
+      markDraftTouched();
       setEditContent((current) => applyNoteTheme(current, newColor));
       return;
     }
@@ -469,6 +504,7 @@ export default function AppHome() {
   const handleVoiceTranscript = async (text: string) => {
     if (!activeNoteId || !activeNote) return;
     if (isEditing) {
+      markDraftTouched();
       setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
     } else {
       try {
@@ -485,7 +521,8 @@ export default function AppHome() {
   const handleInsertChart = async (markdown: string) => {
     if (!activeNoteId || !activeNote) return;
     if (isEditing) {
-      if (editorMode === "visual" && editorInstanceRef.current?.insertMarkdown) {
+      markDraftTouched();
+      if (editorInstanceRef.current?.insertMarkdown) {
         editorInstanceRef.current.insertMarkdown(markdown);
       } else {
         setEditContent((prev) => `${prev}\n${markdown}\n`);
@@ -620,6 +657,7 @@ export default function AppHome() {
 
   // Handle Logout
   const handleLogout = async () => {
+    if (!confirmDiscardDraft()) return;
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   };
@@ -652,6 +690,11 @@ export default function AppHome() {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onPrefetchNote={prefetchNote}
         onSelectNote={(id) => {
+          if (id === activeNoteId) {
+            setIsMobileSidebarOpen(false);
+            return;
+          }
+          if (!confirmDiscardDraft()) return;
           selectActiveNote(id);
           setIsEditing(false);
           setIsMobileSidebarOpen(false);
@@ -823,7 +866,7 @@ export default function AppHome() {
 
                     {/* Cancel & Save */}
                     <button
-                      onClick={() => setIsEditing(false)}
+                      onClick={cancelEditing}
                       className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
                     >
                       {t.cancelEdit}
@@ -932,7 +975,7 @@ export default function AppHome() {
 
             {/* Note Body: Markdown Viewer OR Editor */}
             {isEditing ? (
-              <div className={`flex-1 flex flex-col p-4 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto max-w-5xl mx-auto w-full transition-colors duration-300 ${
+              <div className={`flex-1 min-h-0 flex flex-col gap-4 p-4 sm:p-8 max-w-7xl mx-auto w-full transition-colors duration-300 ${
                 NOTE_THEMES[parseNoteTheme(activeNote?.content || "").color]?.editorBg || "bg-neutral-950"
               }`}>
                 <div>
@@ -942,73 +985,27 @@ export default function AppHome() {
                   <input
                     type="text"
                     value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
+                    onChange={(e) => { markDraftTouched(); setEditTitle(e.target.value); }}
                     className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl px-4 py-2.5 text-lg font-bold text-neutral-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all"
                     placeholder={t.noteTitlePlaceholder}
                   />
                 </div>
-                <div className="flex-1 flex flex-col">
+                <div className="flex-1 min-h-0 flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                      {editorMode === "visual"
-                        ? (lang === "th" ? "เนื้อหาโน้ต (Visual Editor)" : "Note Content (Visual)")
-                        : t.markdownContentLabel}
+                      {t.markdownContentLabel}
                     </label>
-
-                    {/* Mode Switcher Toggle */}
-                    <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEditorMode("visual")}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          editorMode === "visual"
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        <span>{lang === "th" ? "จัดหน้าง่าย (Visual)" : "Visual"}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editorMode === "visual" && editorInstanceRef.current) {
-                            const flushed = editorInstanceRef.current.flush();
-                            setEditContent(flushed);
-                          }
-                          setEditorMode("markdown");
-                        }}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          editorMode === "markdown"
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        <Code className="w-3 h-3" />
-                        <span>{lang === "th" ? "โค้ดดิบ (Markdown)" : "Markdown"}</span>
-                      </button>
-                    </div>
+                    <span className="text-xs text-neutral-500" role="status">
+                      {isSaving ? t.saving : isDraftDirty ? (lang === "th" ? "ยังไม่บันทึก" : "Unsaved changes") : (lang === "th" ? "บันทึกแล้ว" : "Saved")}
+                    </span>
                   </div>
-
-                  {editorMode === "visual" ? (
-                    <RichNoteEditor
-                      ref={editorInstanceRef}
-                      initialContent={editContent}
-                      onChange={(newMarkdown) => setEditContent(newMarkdown)}
-                      onOpenChartWizard={() => setIsChartWizardOpen(true)}
-                      onTriggerVoice={() => {
-                        window.dispatchEvent(new CustomEvent("nota:trigger-voice"));
-                      }}
-                      lang={lang}
-                    />
-                  ) : (
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full flex-1 min-h-[500px] bg-neutral-900/90 border border-neutral-800 rounded-xl p-5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 leading-relaxed resize-y shadow-inner"
-                      placeholder={t.markdownContentPlaceholder}
-                    />
-                  )}
+                  <MarkdownNoteEditor
+                    ref={editorInstanceRef}
+                    noteId={activeNote.id}
+                    value={editContent}
+                    onChange={(value) => { markDraftTouched(); setEditContent(value); }}
+                    lang={lang}
+                  />
                 </div>
               </div>
             ) : (
