@@ -13,6 +13,7 @@ interface MarkdownNoteEditorProps {
   noteId: string;
   value: string;
   onChange: (value: string) => void;
+  autoFocus?: boolean;
   lang: Language;
 }
 
@@ -36,7 +37,7 @@ const ACTIONS: Array<{ action: MarkdownAction; label: string; hint: string }> = 
 ];
 
 const MarkdownNoteEditor = forwardRef<MarkdownNoteEditorHandle, MarkdownNoteEditorProps>(function MarkdownNoteEditor(
-  { noteId, value, onChange, lang },
+  { noteId, value, onChange, autoFocus = false, lang },
   ref,
 ) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,6 +117,7 @@ const MarkdownNoteEditor = forwardRef<MarkdownNoteEditorHandle, MarkdownNoteEdit
           <textarea
             ref={textareaRef}
             value={value}
+            autoFocus={autoFocus}
             onChange={event => onChange(event.target.value)}
             aria-label={lang === "th" ? "เนื้อหา Markdown" : "Markdown content"}
             spellCheck

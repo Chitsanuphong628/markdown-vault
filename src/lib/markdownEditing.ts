@@ -21,6 +21,20 @@ export function isNoteDraftDirty(
   return saved.title !== draft.title || saved.content !== draft.content;
 }
 
+export function getLatestNoteDraftContent(
+  editorMode: "visual" | "markdown",
+  markdownDraft: string,
+  visualEditor: { flush: () => string } | null,
+): string {
+  return editorMode === "visual" ? visualEditor?.flush() ?? markdownDraft : markdownDraft;
+}
+
+export function appendMarkdownBlock(source: string, markdown: string): string {
+  const current = source.replace(/\s+$/, "");
+  const block = markdown.trim();
+  return current ? `${current}\n\n${block}\n` : `${block}\n`;
+}
+
 export function editMarkdownSelection(
   source: string,
   start: number,

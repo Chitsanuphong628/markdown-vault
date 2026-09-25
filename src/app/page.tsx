@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -18,8 +18,9 @@ import {
   Lock,
   Search,
   Menu,
-  BarChart2,
+  Plus,
   Palette,
+  Code2,
 } from "lucide-react";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
@@ -27,7 +28,9 @@ import { Language, I18N_MAIN } from "@/lib/i18n";
 import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
 import { NoteWriteCoordinator, type NotePatch, type EditableNote } from "@/lib/noteWriting";
 import type { MarkdownNoteEditorHandle } from "@/components/MarkdownNoteEditor";
-import { isNoteDraftDirty } from "@/lib/markdownEditing";
+import type { RichNoteEditorHandle } from "@/components/RichNoteEditor";
+import { appendMarkdownBlock, getLatestNoteDraftContent, isNoteDraftDirty } from "@/lib/markdownEditing";
+import { getRichEditorCompatibility, type RichEditorUnsupportedReason } from "@/lib/richEditorCompatibility";
 
 // Dynamically load heavy components only when opened or required
 const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
@@ -42,6 +45,30 @@ const MarkdownNoteEditor = dynamic(() => import("@/components/MarkdownNoteEditor
     </div>
   ),
 });
+const RichNoteEditor = dynamic(() => import("@/components/RichNoteEditor"), { ssr: false });
+
+type EditorMode = "visual" | "markdown";
+const EDITOR_MODE_STORAGE_KEY = "nota_preferred_editor_mode";
+
+function readPreferredEditorMode(): EditorMode {
+  if (typeof window === "undefined") return "visual";
+  try { return localStorage.getItem(EDITOR_MODE_STORAGE_KEY) === "markdown" ? "markdown" : "visual"; }
+  catch { return "visual"; }
+}
+
+function unsupportedEditorMessage(reason: RichEditorUnsupportedReason, lang: Language): string {
+  const labels: Record<RichEditorUnsupportedReason, { en: string; th: string }> = {
+    table: { en: "tables", th: "ตาราง" },
+    image: { en: "images", th: "รูปภาพ" },
+    code: { en: "code and code blocks", th: "โค้ดและโค้ดบล็อก" },
+    math: { en: "math", th: "สูตรคณิตศาสตร์" },
+    html: { en: "HTML", th: "HTML" },
+    advanced: { en: "advanced Markdown", th: "Markdown ขั้นสูง" },
+  };
+  return lang === "th"
+    ? `โน้ตนี้มี${labels[reason].th} จึงเปิดแก้ด้วย Markdown เพื่อรักษาเนื้อหาไว้ครบ`
+    : `This note contains ${labels[reason].en}, so it opens in Markdown to preserve its content.`;
+}
 
 export default function AppHome() {
   const router = useRouter();
@@ -77,6 +104,7 @@ export default function AppHome() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const activeNoteIdRef = useRef<string | null>(null);
   const editorInstanceRef = useRef<MarkdownNoteEditorHandle | null>(null);
+  const richEditorInstanceRef = useRef<RichNoteEditorHandle | null>(null);
   const draftTouchedRef = useRef(false);
   const draftVersionRef = useRef(0);
   const markDraftTouched = () => {
@@ -117,19 +145,63 @@ export default function AppHome() {
 
   // Editor mode state
   const [isEditing, setIsEditing] = useState(false);
+  const [activeEditorMode, setActiveEditorMode] = useState<EditorMode>("visual");
+  const [richEditorDirty, setRichEditorDirty] = useState(false);
+  const [focusEditorOnOpen, setFocusEditorOnOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
-  const isDraftDirty = Boolean(isEditing && activeNote && isNoteDraftDirty(activeNote, { title: editTitle, content: editContent }));
-  const confirmDiscardDraft = () => !isDraftDirty || window.confirm(
-    lang === "th" ? "มีการแก้ไขที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขหรือไม่?" : "Discard unsaved changes?",
+  const editorCompatibility = useMemo(
+    () => getRichEditorCompatibility(isEditing ? editContent : activeNote?.content || ""),
+    [isEditing, editContent, activeNote?.content],
   );
+  const isDraftDirty = Boolean(isEditing && activeNote && (
+    richEditorDirty || isNoteDraftDirty(activeNote, { title: editTitle, content: editContent })
+  ));
+
+  const rememberEditorMode = (mode: EditorMode) => {
+    try { localStorage.setItem(EDITOR_MODE_STORAGE_KEY, mode); } catch { /* Preference remains active for this session. */ }
+  };
+
+  const getLatestDraftContent = () => getLatestNoteDraftContent(
+    activeEditorMode,
+    editContent,
+    richEditorInstanceRef.current,
+  );
+
+  const confirmDiscardDraft = () => {
+    const latestContent = isEditing ? getLatestDraftContent() : editContent;
+    const dirty = Boolean(isEditing && activeNote && isNoteDraftDirty(activeNote, { title: editTitle, content: latestContent }));
+    return !dirty || window.confirm(
+      lang === "th" ? "มีการแก้ไขที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขหรือไม่?" : "Discard unsaved changes?",
+    );
+  };
+
+  const beginEditing = (content = activeNote?.content || "") => {
+    const compatibility = getRichEditorCompatibility(content);
+    setActiveEditorMode(compatibility.supported ? readPreferredEditorMode() : "markdown");
+    setRichEditorDirty(false);
+    setFocusEditorOnOpen(false);
+    setIsEditing(true);
+  };
+
+  const handleEditorModeChange = (mode: EditorMode) => {
+    if (mode === "visual" && !getRichEditorCompatibility(editContent).supported) return;
+    const latestContent = getLatestDraftContent();
+    setEditContent(latestContent);
+    setActiveEditorMode(mode);
+    rememberEditorMode(mode);
+    setRichEditorDirty(false);
+  };
+
   const cancelEditing = () => {
     if (!confirmDiscardDraft()) return;
     draftTouchedRef.current = false;
+    setRichEditorDirty(false);
+    setFocusEditorOnOpen(false);
     if (activeNote) {
       setEditTitle(activeNote.title);
       setEditContent(activeNote.content);
@@ -163,6 +235,7 @@ export default function AppHome() {
 
   // Chart Wizard & Color Picker state
   const [isChartWizardOpen, setIsChartWizardOpen] = useState(false);
+  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   // Keyboard shortcuts state
@@ -367,7 +440,7 @@ export default function AppHome() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: "โน้ตใหม่ไม่มีชื่อ",
-          content: "# หัวข้อใหม่\n\nเริ่มพิมพ์ข้อความหรือ Markdown ของคุณที่นี่...",
+          content: "",
           folderId: folderId || null,
         }),
       });
@@ -375,7 +448,12 @@ export default function AppHome() {
       if (data.note) {
         noteWrites.observeNote(data.note);
         await loadNotes();
+        setEditTitle(data.note.title);
+        setEditContent(data.note.content);
         selectActiveNote(data.note.id);
+        setActiveEditorMode(readPreferredEditorMode());
+        setRichEditorDirty(false);
+        setFocusEditorOnOpen(true);
         setIsEditing(true);
       }
     } catch (err) {
@@ -387,15 +465,18 @@ export default function AppHome() {
   const handleSaveNote = async () => {
     if (!activeNoteId || isSaving) return;
     const targetId = activeNoteId;
+    const latestContent = getLatestDraftContent();
     const savedVersion = draftVersionRef.current;
     setIsSaving(true);
     try {
       await patchNote(targetId, {
         title: editTitle,
-        content: editContent,
+        content: latestContent,
       });
       if (activeNoteIdRef.current === targetId && draftVersionRef.current === savedVersion) {
         draftTouchedRef.current = false;
+        setRichEditorDirty(false);
+        setFocusEditorOnOpen(false);
         setIsEditing(false);
       }
       await loadNotes();
@@ -444,7 +525,7 @@ export default function AppHome() {
       if (matchesShortcut(e, shortcuts.toggleEdit) && activeNote && !isInputFocused) {
         e.preventDefault();
         if (isEditing) cancelEditing();
-        else setIsEditing(true);
+        else beginEditing();
         return;
       }
 
@@ -488,7 +569,8 @@ export default function AppHome() {
     setIsColorPickerOpen(false);
     if (isEditing) {
       markDraftTouched();
-      setEditContent((current) => applyNoteTheme(current, newColor));
+      const latestContent = getLatestDraftContent();
+      setEditContent(applyNoteTheme(latestContent, newColor));
       return;
     }
     try {
@@ -505,7 +587,11 @@ export default function AppHome() {
     if (!activeNoteId || !activeNote) return;
     if (isEditing) {
       markDraftTouched();
-      setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
+      if (activeEditorMode === "visual" && richEditorInstanceRef.current) {
+        richEditorInstanceRef.current.insertText(text);
+      } else {
+        setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
+      }
     } else {
       try {
         const targetId = activeNoteId;
@@ -520,17 +606,23 @@ export default function AppHome() {
   // Handle chart insertion from wizard
   const handleInsertChart = async (markdown: string) => {
     if (!activeNoteId || !activeNote) return;
+    setIsInsertMenuOpen(false);
     if (isEditing) {
       markDraftTouched();
-      if (editorInstanceRef.current?.insertMarkdown) {
+      if (activeEditorMode === "visual") {
+        const latestContent = getLatestDraftContent();
+        setEditContent(appendMarkdownBlock(latestContent, markdown));
+        setRichEditorDirty(false);
+        setActiveEditorMode("markdown");
+      } else if (editorInstanceRef.current?.insertMarkdown) {
         editorInstanceRef.current.insertMarkdown(markdown);
       } else {
-        setEditContent((prev) => `${prev}\n${markdown}\n`);
+        setEditContent((prev) => appendMarkdownBlock(prev, markdown));
       }
     } else {
       try {
         const targetId = activeNoteId;
-        const saved = await patchNote(targetId, (current) => ({ content: `${current.content}\n${markdown}\n` }));
+        const saved = await patchNote(targetId, (current) => ({ content: appendMarkdownBlock(current.content, markdown) }));
         if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
       } catch (err) {
         console.error("Failed to insert chart", err);
@@ -697,6 +789,8 @@ export default function AppHome() {
           if (!confirmDiscardDraft()) return;
           selectActiveNote(id);
           setIsEditing(false);
+          setRichEditorDirty(false);
+          setFocusEditorOnOpen(false);
           setIsMobileSidebarOpen(false);
         }}
         onSelectFolder={(id) => {
@@ -813,16 +907,31 @@ export default function AppHome() {
 
                 {isEditing ? (
                   <>
-                    {/* Chart Wizard Button (Editing mode) */}
-                    <button
-                      type="button"
-                      onClick={() => setIsChartWizardOpen(true)}
-                      title={t.createChart}
-                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                    >
-                      <BarChart2 className="w-3.5 h-3.5 text-indigo-400" />
-                      <span className="hidden sm:inline">{t.createChart}</span>
-                    </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={isInsertMenuOpen}
+                        onClick={() => setIsInsertMenuOpen(open => !open)}
+                        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>{lang === "th" ? "แทรก" : "Insert"}</span>
+                      </button>
+                      {isInsertMenuOpen && (
+                        <div role="menu" className="absolute right-0 top-full z-50 mt-1 min-w-48 rounded-md border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setIsInsertMenuOpen(false); setIsChartWizardOpen(true); }}
+                            className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+                          >
+                            <Code2 className="h-4 w-4 text-neutral-400" />
+                            {lang === "th" ? "แผนภาพและกราฟ" : "Chart and diagram"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Theme Color Picker */}
                     <div className="relative">
@@ -948,7 +1057,7 @@ export default function AppHome() {
 
                     {/* Edit Button */}
                     <button
-                      onClick={() => setIsEditing(true)}
+                      onClick={() => beginEditing(activeNote.content)}
                       title={`${t.editNote} (${formatComboDisplay(shortcuts.toggleEdit)})`}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
                     >
@@ -978,6 +1087,32 @@ export default function AppHome() {
               <div className={`flex-1 min-h-0 flex flex-col gap-4 p-4 sm:p-8 max-w-7xl mx-auto w-full transition-colors duration-300 ${
                 NOTE_THEMES[parseNoteTheme(activeNote?.content || "").color]?.editorBg || "bg-neutral-950"
               }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div role="group" aria-label={lang === "th" ? "โหมดแก้ไขโน้ต" : "Note editing mode"} className="inline-flex items-center rounded-md border border-neutral-800 p-0.5">
+                    <button
+                      type="button"
+                      aria-pressed={activeEditorMode === "visual"}
+                      disabled={!editorCompatibility.supported}
+                      onClick={() => handleEditorModeChange("visual")}
+                      className={`rounded px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${activeEditorMode === "visual" ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                    >
+                      {lang === "th" ? "เขียนง่าย" : "Visual"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={activeEditorMode === "markdown"}
+                      onClick={() => handleEditorModeChange("markdown")}
+                      className={`rounded px-3 py-1.5 text-xs transition-colors ${activeEditorMode === "markdown" ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                    >
+                      Markdown
+                    </button>
+                  </div>
+                  {!editorCompatibility.supported && (
+                    <span role="status" className="max-w-xl text-xs text-neutral-500">
+                      {unsupportedEditorMessage(editorCompatibility.reason, lang)}
+                    </span>
+                  )}
+                </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     {t.noteTitleLabel}
@@ -993,19 +1128,31 @@ export default function AppHome() {
                 <div className="flex-1 min-h-0 flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                      {t.markdownContentLabel}
+                      {activeEditorMode === "visual" ? (lang === "th" ? "เนื้อหาโน้ต" : "Note content") : t.markdownContentLabel}
                     </label>
                     <span className="text-xs text-neutral-500" role="status">
                       {isSaving ? t.saving : isDraftDirty ? (lang === "th" ? "ยังไม่บันทึก" : "Unsaved changes") : (lang === "th" ? "บันทึกแล้ว" : "Saved")}
                     </span>
                   </div>
-                  <MarkdownNoteEditor
-                    ref={editorInstanceRef}
-                    noteId={activeNote.id}
-                    value={editContent}
-                    onChange={(value) => { markDraftTouched(); setEditContent(value); }}
-                    lang={lang}
-                  />
+                  {activeEditorMode === "visual" ? (
+                    <RichNoteEditor
+                      ref={richEditorInstanceRef}
+                      initialContent={editContent}
+                      onChange={(value) => { markDraftTouched(); setEditContent(value); }}
+                      onDirtyChange={setRichEditorDirty}
+                      autoFocus={focusEditorOnOpen}
+                      lang={lang}
+                    />
+                  ) : (
+                    <MarkdownNoteEditor
+                      ref={editorInstanceRef}
+                      noteId={activeNote.id}
+                      value={editContent}
+                      onChange={(value) => { markDraftTouched(); setEditContent(value); }}
+                      autoFocus={focusEditorOnOpen}
+                      lang={lang}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
