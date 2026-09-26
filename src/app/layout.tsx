@@ -26,6 +26,9 @@ export const metadata: Metadata = {
     title: "Nota",
     statusBarStyle: "black-translucent",
   },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
   openGraph: {
     title: "Nota · Notes",
     description: "Write, organize, and search notes. Edit Markdown whenever you need it.",
@@ -36,7 +39,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#090a0f",
   colorScheme: "dark",
 };
 

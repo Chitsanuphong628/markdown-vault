@@ -64,9 +64,8 @@ export default function PwaInstallControl({ lang }: PwaInstallControlProps) {
 
     try {
       await installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
+      await installPrompt.userChoice;
       setInstallPrompt(null);
-      if (choice.outcome === "accepted") setInstalled(true);
     } catch {
       setInstallPrompt(null);
       setShowInstructions(true);

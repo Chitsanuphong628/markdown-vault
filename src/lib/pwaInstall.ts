@@ -9,13 +9,17 @@ export function isPwaInstalled(displayModeStandalone: boolean, legacyStandalone:
   return displayModeStandalone || legacyStandalone;
 }
 
+function isMacPlatform(userAgent: string): boolean {
+  return /Macintosh|MacIntel/i.test(userAgent);
+}
+
 export function isIosLike(userAgent: string, maxTouchPoints: number): boolean {
   return /iPhone|iPad|iPod/i.test(userAgent)
-    || (/Macintosh|MacIntel/i.test(userAgent) && maxTouchPoints > 1);
+    || (isMacPlatform(userAgent) && maxTouchPoints > 1);
 }
 
 export function isSafariOnMac(userAgent: string, maxTouchPoints: number): boolean {
-  return /Macintosh|MacIntel/i.test(userAgent)
+  return isMacPlatform(userAgent)
     && maxTouchPoints <= 1
     && /Safari/i.test(userAgent)
     && !/(Chrome|Chromium|CriOS|Edg|FxiOS)/i.test(userAgent);

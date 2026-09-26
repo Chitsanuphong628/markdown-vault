@@ -8,8 +8,8 @@ test("PWA manifest requests a standalone Nota app with Android icon sizes", () =
   assert.equal(appManifest.short_name, "Nota");
   assert.equal(appManifest.start_url, "/");
   assert.equal(appManifest.display, "standalone");
-  assert.equal(appManifest.background_color, "#09090b");
-  assert.equal(appManifest.theme_color, "#09090b");
+  assert.equal(appManifest.background_color, "#090a0f");
+  assert.equal(appManifest.theme_color, "#090a0f");
   assert.deepEqual(
     appManifest.icons?.map(icon => icon.sizes),
     ["192x192", "512x512"],
