@@ -21,6 +21,7 @@ import {
 import { Language, I18N_MAIN } from "@/lib/i18n";
 import { NoteColorKey } from "@/lib/noteTheme";
 import { getShortcuts, formatComboDisplay } from "@/lib/shortcuts";
+import PwaInstallControl from "@/components/PwaInstallControl";
 
 export interface FolderItem {
   id: string;
@@ -670,8 +671,10 @@ function Sidebar({
         )}
       </div>
 
+      <PwaInstallControl lang={lang} />
+
       {/* Sidebar Footer with Language & Logout */}
-      <div className="p-3 border-t border-neutral-800/80 bg-neutral-950/40 flex items-center justify-between">
+      <div className="p-3 bg-neutral-950/40 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs text-neutral-400">
           <button
             type="button"
