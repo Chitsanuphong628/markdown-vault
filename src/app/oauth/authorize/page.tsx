@@ -14,6 +14,8 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
+import { AUTH_COPY } from "@/lib/authCopy";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 
 interface UserInfo {
   id: string;
@@ -30,6 +32,8 @@ interface ClientInfo {
 function AuthorizeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [lang] = useLanguagePreference();
+  const t = AUTH_COPY[lang];
 
   const clientId = searchParams.get("client_id") || "";
   const redirectUri = searchParams.get("redirect_uri") || "";
@@ -86,7 +90,7 @@ function AuthorizeContent() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Authorization failed");
+        setError(t.oauthError);
         setSubmitting(false);
         return;
       }
@@ -95,7 +99,7 @@ function AuthorizeContent() {
         window.location.href = data.redirectUrl;
       }
     } catch {
-      setError("Network error occurred while processing authorization");
+      setError(t.oauthNetworkError);
       setSubmitting(false);
     }
   };
@@ -119,16 +123,16 @@ function AuthorizeContent() {
           <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold text-neutral-100">Invalid OAuth Request</h1>
+          <h1 className="text-lg font-bold text-neutral-100">{t.oauthInvalidTitle}</h1>
           <p className="text-xs text-neutral-400 leading-relaxed">
-              คำขอเชื่อมต่อ OAuth 2.0 ไม่สมบูรณ์ หรือ callback ไม่ตรงกับ client ที่ลงทะเบียนไว้
+              {t.oauthInvalidDescription}
           </p>
           <button
             type="button"
             onClick={() => router.push("/")}
             className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
           >
-            กลับสู่หน้าหลัก (Back to Nota)
+            {t.backToNota}
           </button>
         </div>
       </div>
@@ -144,10 +148,10 @@ function AuthorizeContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-neutral-100 mb-1">
-              เข้าสู่ระบบเพื่อเชื่อมต่อ MCP
+              {t.oauthSignInTitle}
             </h1>
             <p className="text-xs text-neutral-400 leading-relaxed">
-              แอปพลิเคชัน <strong className="text-indigo-300">{clientDisplayName}</strong> ต้องการเชื่อมต่อกับคลังโน้ตของคุณ กรุณาเข้าสู่ระบบ Nota ก่อนอนุญาตสิทธิ์
+              {t.oauthSignInDescription.replace("{client}", clientDisplayName)}
             </p>
           </div>
           <button
@@ -158,7 +162,7 @@ function AuthorizeContent() {
             }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
           >
-            เข้าสู่ระบบ (Sign in to Nota)
+            {t.signIn}
           </button>
         </div>
       </div>
@@ -181,16 +185,16 @@ function AuthorizeContent() {
           </div>
 
           <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 mb-2">
-            MCP OAuth 2.0 Authorization
+            MCP · OAuth 2.0
           </span>
           <h1 className="text-base font-bold text-neutral-100">
-            อนุญาตให้ <span className="text-indigo-400">{clientDisplayName}</span> เชื่อมต่อหรือไม่?
+            {t.oauthAllowTitle.replace("{client}", clientDisplayName)}
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            บัญชีของคุณ: <span className="text-neutral-200 font-medium">{user.email}</span>
+            {t.oauthAccount}: <span className="text-neutral-200 font-medium">{user.email}</span>
           </p>
           <p className="text-[11px] text-neutral-500 mt-2 break-all">
-            ปลายทางหลังอนุญาต: <code>{redirectUri}</code>
+            {t.oauthRedirect}: <code>{redirectUri}</code>
           </p>
         </div>
 
@@ -198,7 +202,7 @@ function AuthorizeContent() {
         <div className="p-6 space-y-5">
           <div className="space-y-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-              สิทธิ์ที่แอปพลิเคชันนี้จะได้รับ (Model Context Protocol):
+              {t.oauthPermissions}
             </div>
 
             <div className="space-y-2.5">
@@ -206,10 +210,10 @@ function AuthorizeContent() {
                 <FileText className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">
-                    ค้นหาและอ่านโน้ต (Read & Search Notes)
+                    {t.oauthReadTitle}
                   </div>
                   <div className="text-[11px] text-neutral-400">
-                    เข้าถึงรายการโน้ต ค้นหาข้อความ และอ่านเนื้อหา Markdown
+                    {t.oauthReadDescription}
                   </div>
                 </div>
               </div>
@@ -218,10 +222,10 @@ function AuthorizeContent() {
                 <Edit3 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">
-                    สร้างและแก้ไขเอกสาร (Create & Update Notes)
+                    {t.oauthWriteTitle}
                   </div>
                   <div className="text-[11px] text-neutral-400">
-                    สร้างบันทึกใหม่ แก้ไขเนื้อหา และตั้งค่าการแชร์สาธารณะ
+                    {t.oauthWriteDescription}
                   </div>
                 </div>
               </div>
@@ -230,10 +234,10 @@ function AuthorizeContent() {
                 <FolderTree className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">
-                    จัดการโครงสร้างโฟลเดอร์ (Manage Folders)
+                    {t.oauthFoldersTitle}
                   </div>
                   <div className="text-[11px] text-neutral-400">
-                    สร้างโฟลเดอร์ จัดหมวดหมู่ และทำความสะอาดโน้ตที่ซ้ำซ้อน
+                    {t.oauthFoldersDescription}
                   </div>
                 </div>
               </div>
@@ -256,7 +260,7 @@ function AuthorizeContent() {
               className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-neutral-800 hover:bg-neutral-750 text-neutral-300 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
             >
               <X className="w-4 h-4" />
-              <span>ปฏิเสธ (Deny)</span>
+              <span>{t.deny}</span>
             </button>
 
             <button
@@ -266,12 +270,12 @@ function AuthorizeContent() {
               className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-50 cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              <span>{submitting ? "กำลังเชื่อมต่อ..." : "อนุญาต (Authorize)"}</span>
+              <span>{submitting ? t.authorizing : t.allow}</span>
             </button>
           </div>
 
           <p className="text-[11px] text-center text-neutral-500 leading-relaxed">
-            ปลอดภัยด้วยมาตรฐาน PKCE S256 • คุณสามารถยกเลิกสิทธิ์ (Revoke) ได้ตลอดเวลาที่เมนู Settings → MCP
+            {t.oauthSecurity}
           </p>
         </div>
       </div>
@@ -282,13 +286,18 @@ function AuthorizeContent() {
 export default function OAuthAuthorizePage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#0c0c0f] text-neutral-100 flex items-center justify-center">
-          <div className="text-xs text-neutral-400 font-mono">Loading OAuth Consent...</div>
-        </div>
-      }
+      fallback={<OAuthLoading />}
     >
       <AuthorizeContent />
     </Suspense>
+  );
+}
+
+function OAuthLoading() {
+  const [lang] = useLanguagePreference();
+  return (
+    <div className="min-h-screen bg-[#0c0c0f] text-neutral-100 flex items-center justify-center">
+      <div className="text-xs text-neutral-400 font-mono">{AUTH_COPY[lang].loading}</div>
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
+@import "highlight.js/styles/atom-one-dark.css";
 
 :root {
   --background: #ffffff;
@@ -61,6 +62,14 @@ body {
 .nota-markdown ul:has(> li.task-list-item) { list-style: none; padding-left: 0.4rem; }
 .nota-markdown blockquote { margin: 1.4rem 0; padding: 0.15rem 1rem; border-left: 2px solid #6366f1; color: #a1a1aa; }
 .nota-markdown blockquote p:last-child { margin-bottom: 0; }
+.nota-gfm-alert-body > :first-child { margin-top: 0; }
+.nota-gfm-alert-body > :last-child { margin-bottom: 0; }
+.nota-gfm-alert-body p { margin: 0.4rem 0; }
+.nota-gfm-alert-body ul, .nota-gfm-alert-body ol { margin: 0.4rem 0; padding-left: 1.25rem; }
+.nota-gfm-alert-body ul { list-style: disc; }
+.nota-gfm-alert-body ol { list-style: decimal; }
+.nota-gfm-alert-body pre { max-width: 100%; overflow-x: auto; border-radius: 0.35rem; background: #09090b; padding: 0.6rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.82rem; }
+.nota-gfm-alert-body :not(pre) > code { border-radius: 0.25rem; background: #222634; padding: 0.08rem 0.28rem; font-family: ui-monospace, monospace; font-size: 0.86em; }
 .nota-markdown hr { border: 0; border-top: 1px solid #272b35; margin: 2rem 0; }
 .nota-markdown img { display: block; width: auto; height: auto; max-width: 100%; max-height: 70vh; margin: 1.4rem auto; border-radius: 0.5rem; }
 .nota-markdown table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 1.3rem 0; font-size: 0.9rem; }
@@ -136,6 +145,15 @@ a:focus:not(:focus-visible) {
   margin-top: 1rem;
   margin-bottom: 0.35rem;
   line-height: 1.4;
+}
+
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  margin-top: 0.85rem;
+  margin-bottom: 0.3rem;
+  line-height: 1.45;
 }
 
 .ProseMirror ul {

@@ -20,8 +20,11 @@ import {
   generateMindmap,
   generateStateDiagram,
   attachThemeDirective,
+  attachMindmapThemeDirective,
+  attachFlowchartThemeDirective,
   COLOR_PALETTES,
   FlowNode,
+  FlowNodeTone,
   SequenceMessage,
 } from "./charts/mermaidGenerators";
 import { DIAGRAM_TEMPLATES, DiagramTemplate } from "./charts/diagramTemplates";
@@ -31,13 +34,14 @@ interface ChartWizardModalProps {
   onClose: () => void;
   onInsertChart: (markdown: string) => void;
   lang: Language;
+  initialType: "flowchart" | "mindmap";
 }
 
 type StudioTab = "visual" | "templates" | "code";
 type VisualType = "flowchart" | "sequence" | "bar" | "pie" | "mindmap" | "state";
 
 const VISUAL_TYPES: Array<{ id: VisualType; en: string; th: string; titleEn: string; titleTh: string }> = [
-  { id: "flowchart", en: "Flowchart", th: "ผังงาน", titleEn: "Process flow", titleTh: "ผังกระบวนการ" },
+  { id: "flowchart", en: "Workflow", th: "Workflow", titleEn: "Workflow", titleTh: "Workflow" },
   { id: "sequence", en: "Sequence", th: "ลำดับงาน", titleEn: "Sequence diagram", titleTh: "ลำดับการทำงาน" },
   { id: "bar", en: "Bar / line", th: "กราฟแท่ง / เส้น", titleEn: "Metrics", titleTh: "สถิติ" },
   { id: "pie", en: "Pie", th: "กราฟวงกลม", titleEn: "Distribution", titleTh: "สัดส่วน" },
@@ -45,21 +49,40 @@ const VISUAL_TYPES: Array<{ id: VisualType; en: string; th: string; titleEn: str
   { id: "state", en: "State", th: "สถานะ", titleEn: "State diagram", titleTh: "สถานะการทำงาน" },
 ];
 
+function getVisualTitle(type: VisualType, lang: Language): string {
+  const selectedType = VISUAL_TYPES.find((item) => item.id === type);
+  if (!selectedType) return lang === "th" ? "ผังงาน" : "Workflow";
+  return lang === "th" ? selectedType.titleTh : selectedType.titleEn;
+}
+
+const FLOW_TONES: Array<{ id: FlowNodeTone; en: string; th: string }> = [
+  { id: "start", en: "Start / end", th: "เริ่ม / จบ" },
+  { id: "process", en: "Process", th: "ขั้นตอน" },
+  { id: "decision", en: "Decision", th: "เงื่อนไข" },
+  { id: "data", en: "Data", th: "ข้อมูล" },
+  { id: "success", en: "Success", th: "สำเร็จ" },
+  { id: "warning", en: "Warning", th: "คำเตือน" },
+  { id: "danger", en: "Error", th: "ข้อผิดพลาด" },
+];
+
 export default function ChartWizardModal({
   isOpen,
   onClose,
   onInsertChart,
   lang,
+  initialType,
 }: ChartWizardModalProps) {
   const [activeTab, setActiveTab] = useState<StudioTab>("visual");
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [visualType, setVisualType] = useState<VisualType>("flowchart");
+  const [visualType, setVisualType] = useState<VisualType>(initialType);
   const [mobilePanel, setMobilePanel] = useState<"edit" | "preview">("edit");
   const [activePalette, setActivePalette] = useState(COLOR_PALETTES[0].key);
   const [previewResult, setPreviewResult] = useState<{ code: string; valid: boolean }>({ code: "", valid: false });
+  const [customCodeDirty, setCustomCodeDirty] = useState(false);
+  const [customCodeEdited, setCustomCodeEdited] = useState(false);
 
   // Common metadata
-  const [title, setTitle] = useState(lang === "th" ? "ผังกระบวนการทำงาน" : "Process Flow");
+  const [title, setTitle] = useState(() => getVisualTitle(initialType, lang));
 
   // 1. Flowchart State
   const [flowDirection, setFlowDirection] = useState<"TD" | "LR">("TD");
@@ -75,9 +98,9 @@ export default function ChartWizardModal({
         { targetId: "Save", label: lang === "th" ? "ถูกต้อง" : "Valid" },
       ],
     },
-    { id: "Alert", label: lang === "th" ? "แจ้งเตือนข้อผิดพลาด" : "Display Error", shape: "rect" },
+    { id: "Alert", label: lang === "th" ? "แจ้งเตือนข้อผิดพลาด" : "Display Error", shape: "rect", tone: "danger" },
     { id: "Save", label: lang === "th" ? "บันทึกข้อมูลลงระบบ" : "Save Record", shape: "database" },
-    { id: "End", label: lang === "th" ? "เสร็จสิ้น (Finish)" : "Done", shape: "round" },
+    { id: "End", label: lang === "th" ? "เสร็จสิ้น (Finish)" : "Done", shape: "round", tone: "success" },
   ]);
 
   // 2. Sequence State
@@ -112,7 +135,7 @@ export default function ChartWizardModal({
 
   // 5. Mindmap State
   const [mindmapRoot, setMindmapRoot] = useState(lang === "th" ? "โครงการ" : "Project");
-  const [mindmapBranches, setMindmapBranches] = useState([
+  const [mindmapBranches, setMindmapBranches] = useState<Array<{ label: string; purpose?: string; subBranches: string[] }>>([
     {
       label: lang === "th" ? "เป้าหมาย" : "Goals",
       subBranches: [lang === "th" ? "ผลลัพธ์" : "Outcome", lang === "th" ? "ตัวชี้วัด" : "Measure"],
@@ -170,6 +193,7 @@ export default function ChartWizardModal({
         return generateMindmap({
           root: mindmapRoot,
           branches: mindmapBranches,
+          purposeLabel: lang === "th" ? "ทำเพื่อ" : "Purpose",
         });
       case "state":
         return generateStateDiagram({
@@ -194,13 +218,19 @@ export default function ChartWizardModal({
     lang,
   ]);
 
+  const styledVisualCode = useMemo(() => {
+    if (visualType === "mindmap") return attachMindmapThemeDirective(generatedVisualCode);
+    if (visualType === "flowchart") return attachFlowchartThemeDirective(generatedVisualCode);
+    return attachThemeDirective(generatedVisualCode, activePalette);
+  }, [visualType, generatedVisualCode, activePalette]);
+
   // Active Mermaid Code depending on tab
   const activeMermaidCode = useMemo(() => {
     if (activeTab === "code") {
       return customCode;
     }
-    return attachThemeDirective(generatedVisualCode, activePalette);
-  }, [activeTab, customCode, generatedVisualCode, activePalette]);
+    return styledVisualCode;
+  }, [activeTab, customCode, styledVisualCode]);
   const handleValidationChange = useCallback((code: string, valid: boolean) => {
     setPreviewResult({ code, valid });
   }, []);
@@ -225,9 +255,28 @@ export default function ChartWizardModal({
   if (!isOpen) return null;
 
   const handleSelectTemplate = (template: DiagramTemplate) => {
-    setCustomCode(template.mermaidCode);
+    const code = template.category === "mindmap"
+      ? attachMindmapThemeDirective(template.mermaidCode)
+      : template.category === "flowchart"
+        ? attachFlowchartThemeDirective(template.mermaidCode)
+        : template.mermaidCode;
+    setCustomCode(code);
+    setCustomCodeDirty(true);
+    setCustomCodeEdited(false);
     setActiveTab("code");
     setMobilePanel("preview");
+  };
+
+  const handleResetCodeFromVisual = () => {
+    if (customCodeEdited && typeof window !== "undefined") {
+      const message = lang === "th"
+        ? "แทนที่ Mermaid ที่แก้ไว้ด้วยค่าล่าสุดจากฟอร์มหรือไม่?"
+        : "Replace the edited Mermaid source with the latest visual form values?";
+      if (!window.confirm(message)) return;
+    }
+    setCustomCode(styledVisualCode);
+    setCustomCodeDirty(false);
+    setCustomCodeEdited(false);
   };
 
   const handleInsert = () => {
@@ -250,22 +299,22 @@ export default function ChartWizardModal({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#222634] px-4 py-3 sm:px-5">
           <h2 id="chart-studio-title" className="text-sm font-semibold text-neutral-100">
-            {lang === "th" ? "สร้างกราฟและแผนภาพ" : "Chart & Diagram Studio"}
+            {lang === "th" ? "สร้างแผนภาพ" : "Create a diagram"}
           </h2>
-          <button type="button" onClick={onClose} aria-label={lang === "th" ? "ปิดสตูดิโอ" : "Close studio"} className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-indigo-500">
+          <button type="button" onClick={onClose} aria-label={lang === "th" ? "ปิดหน้าต่างแผนภาพ" : "Close diagram editor"} className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-indigo-500">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#222634] px-4 sm:px-5">
           <div role="tablist" aria-label={lang === "th" ? "วิธีสร้าง" : "Creation method"} className="flex gap-5 overflow-x-auto">
             {([
-              ["visual", lang === "th" ? "สร้างเอง" : "Build"],
+              ["visual", lang === "th" ? "สร้าง" : "Create"],
               ["templates", lang === "th" ? "แม่แบบ" : "Templates"],
               ["code", "Mermaid"],
             ] as const).map(([tab, label]) => (
               <button key={tab} type="button" role="tab" aria-selected={activeTab === tab}
                 onClick={() => {
-                  if (tab === "code" && !customCode) setCustomCode(generatedVisualCode);
+                  if (tab === "code" && !customCodeDirty) setCustomCode(styledVisualCode);
                   setActiveTab(tab);
                   setMobilePanel("edit");
                 }}
@@ -298,7 +347,7 @@ export default function ChartWizardModal({
                       <button key={type.id} type="button" aria-pressed={visualType === type.id}
                         onClick={() => {
                           setVisualType(type.id);
-                          setTitle(lang === "th" ? type.titleTh : type.titleEn);
+                          setTitle(getVisualTitle(type.id, lang));
                         }}
                         className={`rounded border px-3 py-2 text-left text-xs font-medium focus-visible:outline-2 focus-visible:outline-indigo-500 ${
                           visualType === type.id
@@ -311,7 +360,7 @@ export default function ChartWizardModal({
                   </div>
                 </div>
 
-                <div className={`grid gap-4 ${visualType === "bar" || visualType === "pie" ? "sm:grid-cols-2" : ""}`}>
+                {visualType !== "flowchart" && visualType !== "mindmap" && <div className={`grid gap-4 ${visualType === "bar" || visualType === "pie" ? "sm:grid-cols-2" : ""}`}>
                   {(visualType === "bar" || visualType === "pie") && <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
                       {lang === "th" ? "ชื่อกราฟ" : "Chart title"}
@@ -341,7 +390,7 @@ export default function ChartWizardModal({
                       ))}
                     </select>
                   </div>
-                </div>
+                </div>}
 
                 {/* FORM CONTROLS: FLOWCHART */}
                 {visualType === "flowchart" && (
@@ -434,8 +483,29 @@ export default function ChartWizardModal({
                               placeholder={lang === "th" ? "ข้อความในขั้นตอน" : "Step label"}
                             />
 
+                            <div className="col-start-2 col-span-2 row-start-3 flex min-w-0 items-center justify-between gap-2 sm:col-auto sm:row-auto sm:ml-auto">
+                              <span className="shrink-0 text-[10px] text-neutral-500">
+                                {lang === "th" ? "สีตามบทบาท" : "Color role"}
+                              </span>
+                              <select
+                                value={node.tone || "auto"}
+                                aria-label={lang === "th" ? `บทบาทสีของขั้นตอนที่ ${idx + 1}` : `Color role for step ${idx + 1}`}
+                                onChange={(e) => {
+                                  const tone = e.target.value === "auto" ? undefined : e.target.value as FlowNodeTone;
+                                  setFlowNodes(flowNodes.map((item, itemIndex) => itemIndex === idx ? { ...item, tone } : item));
+                                }}
+                                className="min-w-0 bg-neutral-900 border border-neutral-700/80 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none"
+                              >
+                                <option value="auto">{lang === "th" ? "ตามรูปทรง" : "From shape"}</option>
+                                {FLOW_TONES.map((tone) => (
+                                  <option key={tone.id} value={tone.id}>{tone[lang]}</option>
+                                ))}
+                              </select>
+                            </div>
+
                             <button
                               type="button"
+                              aria-label={lang === "th" ? `ลบขั้นตอนที่ ${idx + 1}` : `Remove step ${idx + 1}`}
                               onClick={() => {
                                 const remaining = flowNodes.filter((_, itemIndex) => itemIndex !== idx);
                                 setFlowNodes(remaining.map(item => ({
@@ -497,7 +567,7 @@ export default function ChartWizardModal({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                          {lang === "th" ? "ผู้มีส่วนร่วม (Participants/Actors)" : "Participants"}
+                          {lang === "th" ? "ผู้เข้าร่วม" : "Participants"}
                         </label>
                         <button
                           type="button"
@@ -526,6 +596,7 @@ export default function ChartWizardModal({
                             />
                             <button
                               type="button"
+                              aria-label={lang === "th" ? `ลบผู้เข้าร่วม ${idx + 1}` : `Remove participant ${idx + 1}`}
                               onClick={() => setSeqParticipants(seqParticipants.filter((_, i) => i !== idx))}
                               disabled={seqParticipants.length <= 2}
                               className="text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -541,7 +612,7 @@ export default function ChartWizardModal({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                          {lang === "th" ? "ข้อความและการเรียก (Messages)" : "Messages"}
+                          {lang === "th" ? "ข้อความ" : "Messages"}
                         </label>
                         <button
                           type="button"
@@ -621,11 +692,12 @@ export default function ChartWizardModal({
                                 setSeqMessages(updated);
                               }}
                               className="col-span-2 min-w-0 w-full sm:flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-200"
-                              placeholder="Message label..."
+                              placeholder={lang === "th" ? "ข้อความ" : "Message"}
                             />
 
                             <button
                               type="button"
+                              aria-label={lang === "th" ? `ลบข้อความที่ ${idx + 1}` : `Remove message ${idx + 1}`}
                               onClick={() => setSeqMessages(seqMessages.filter((_, i) => i !== idx))}
                               disabled={seqMessages.length <= 1}
                               className="justify-self-end text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -704,7 +776,7 @@ export default function ChartWizardModal({
                               setChartItems(updated);
                             }}
                             className="min-w-0 basis-full sm:basis-auto sm:flex-1 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-xs text-neutral-200"
-                            placeholder="Label"
+                            placeholder={lang === "th" ? "ชื่อรายการ" : "Item name"}
                           />
                           <input
                             type="number"
@@ -715,7 +787,7 @@ export default function ChartWizardModal({
                               setChartItems(updated);
                             }}
                             className="w-24 bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200"
-                            placeholder="Value"
+                            placeholder={lang === "th" ? "ค่า" : "Value"}
                           />
                           {chartMode === "both" && (
                             <input
@@ -727,11 +799,12 @@ export default function ChartWizardModal({
                                 setChartItems(updated);
                               }}
                               className="w-24 bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-sky-400"
-                              placeholder="Line Target"
+                              placeholder={lang === "th" ? "ค่ากราฟเส้น" : "Line value"}
                             />
                           )}
                           <button
                             type="button"
+                            aria-label={lang === "th" ? `ลบแถวที่ ${idx + 1}` : `Remove row ${idx + 1}`}
                             onClick={() => setChartItems(chartItems.filter((_, i) => i !== idx))}
                             disabled={chartItems.length <= 2}
                             className="p-1 text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -789,6 +862,7 @@ export default function ChartWizardModal({
                           />
                           <button
                             type="button"
+                            aria-label={lang === "th" ? `ลบรายการที่ ${idx + 1}` : `Remove item ${idx + 1}`}
                             onClick={() => setPieItems(pieItems.filter((_, i) => i !== idx))}
                             disabled={pieItems.length <= 2}
                             className="p-1 text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -806,7 +880,7 @@ export default function ChartWizardModal({
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">
-                        {lang === "th" ? "แกนกลางความคิด (Root)" : "Central Topic"}
+                        {lang === "th" ? "หัวข้อกลาง" : "Central topic"}
                       </label>
                       <input
                         type="text"
@@ -825,7 +899,7 @@ export default function ChartWizardModal({
                         onClick={() => {
                           setMindmapBranches([
                             ...mindmapBranches,
-                            { label: lang === "th" ? "ประเด็นใหม่" : "New branch", subBranches: [lang === "th" ? "ประเด็นย่อย" : "Subtopic"] },
+                            { label: lang === "th" ? "ประเด็นใหม่" : "New branch", purpose: "", subBranches: [lang === "th" ? "ประเด็นย่อย" : "Subtopic"] },
                           ]);
                         }}
                         className="flex items-center gap-1 text-xs text-indigo-400 font-medium cursor-pointer"
@@ -843,27 +917,23 @@ export default function ChartWizardModal({
                             <input
                               type="text"
                               value={b.label}
-                              onChange={(e) => {
-                                const updated = [...mindmapBranches];
-                                updated[idx].label = e.target.value;
-                                setMindmapBranches(updated);
-                              }}
+                              aria-label={lang === "th" ? `ชื่อกิ่งที่ ${idx + 1}` : `Branch ${idx + 1} title`}
+                              placeholder={lang === "th" ? "หัวข้อกิ่ง" : "Branch topic"}
+                              onChange={(e) => setMindmapBranches(mindmapBranches.map((branch, branchIndex) => branchIndex === idx ? { ...branch, label: e.target.value } : branch))}
                               className="flex-1 bg-neutral-900 border border-neutral-700/80 rounded-lg px-2.5 py-1 text-xs text-neutral-200"
                             />
                             <button
                               type="button"
-                              onClick={() => {
-                                const updated = [...mindmapBranches];
-                                if (!updated[idx].subBranches) updated[idx].subBranches = [];
-                                updated[idx].subBranches!.push(lang === "th" ? "ประเด็นย่อย" : "Subtopic");
-                                setMindmapBranches(updated);
-                              }}
+                              onClick={() => setMindmapBranches(mindmapBranches.map((branch, branchIndex) => branchIndex === idx
+                                ? { ...branch, subBranches: [...branch.subBranches, lang === "th" ? "ประเด็นย่อย" : "Subtopic"] }
+                                : branch))}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium px-2 py-0.5 rounded bg-indigo-500/10 cursor-pointer"
                             >
                               {lang === "th" ? "+ ประเด็นย่อย" : "+ Subtopic"}
                             </button>
                             <button
                               type="button"
+                              aria-label={lang === "th" ? `ลบกิ่งที่ ${idx + 1}` : `Remove branch ${idx + 1}`}
                               onClick={() => setMindmapBranches(mindmapBranches.filter((_, i) => i !== idx))}
                               disabled={mindmapBranches.length <= 1}
                               className="text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -871,6 +941,16 @@ export default function ChartWizardModal({
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
+
+                          <input
+                            type="text"
+                            value={b.purpose || ""}
+                            aria-label={lang === "th" ? `ทำเพื่อกิ่งที่ ${idx + 1}` : `Purpose of branch ${idx + 1}`}
+                            maxLength={64}
+                            onChange={(e) => setMindmapBranches(mindmapBranches.map((branch, branchIndex) => branchIndex === idx ? { ...branch, purpose: e.target.value } : branch))}
+                            className="ml-6 w-[calc(100%-1.5rem)] bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-neutral-300 placeholder:text-neutral-600"
+                            placeholder={lang === "th" ? "ทำเพื่อ (ไม่บังคับ)" : "Purpose (optional)"}
+                          />
 
                           {b.subBranches && b.subBranches.length > 0 && (
                             <div className="pl-6 space-y-1.5">
@@ -880,20 +960,20 @@ export default function ChartWizardModal({
                                   <input
                                     type="text"
                                     value={sub}
-                                    onChange={(e) => {
-                                      const updated = [...mindmapBranches];
-                                      updated[idx].subBranches![sIdx] = e.target.value;
-                                      setMindmapBranches(updated);
-                                    }}
+                                    aria-label={lang === "th" ? `ประเด็นย่อย ${sIdx + 1} ในกิ่ง ${idx + 1}` : `Subtopic ${sIdx + 1} in branch ${idx + 1}`}
+                                    onChange={(e) => setMindmapBranches(mindmapBranches.map((branch, branchIndex) => branchIndex === idx ? {
+                                      ...branch,
+                                      subBranches: branch.subBranches.map((item, itemIndex) => itemIndex === sIdx ? e.target.value : item),
+                                    } : branch))}
                                     className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-[11px] text-neutral-300"
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const updated = [...mindmapBranches];
-                                      updated[idx].subBranches = updated[idx].subBranches!.filter((_, i) => i !== sIdx);
-                                      setMindmapBranches(updated);
-                                    }}
+                                    aria-label={lang === "th" ? `ลบประเด็นย่อยที่ ${sIdx + 1}` : `Remove subtopic ${sIdx + 1}`}
+                                    onClick={() => setMindmapBranches(mindmapBranches.map((branch, branchIndex) => branchIndex === idx ? {
+                                      ...branch,
+                                      subBranches: branch.subBranches.filter((_, itemIndex) => itemIndex !== sIdx),
+                                    } : branch))}
                                     className="text-neutral-500 hover:text-rose-400 cursor-pointer"
                                   >
                                     <X className="w-3 h-3" />
@@ -913,7 +993,7 @@ export default function ChartWizardModal({
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                        {lang === "th" ? "การเปลี่ยนผ่านสถานะ (State Transitions)" : "Transitions"}
+                        {lang === "th" ? "การเปลี่ยนสถานะ" : "Transitions"}
                       </label>
                       <button
                         type="button"
@@ -942,7 +1022,7 @@ export default function ChartWizardModal({
                               setStateTransitions(updated);
                             }}
                             className="w-24 bg-neutral-900 border border-neutral-700/80 rounded px-2 py-1 text-xs text-neutral-200"
-                            placeholder="From"
+                            placeholder={lang === "th" ? "จากสถานะ" : "From state"}
                           />
                           <ArrowRight className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                           <input
@@ -954,7 +1034,7 @@ export default function ChartWizardModal({
                               setStateTransitions(updated);
                             }}
                             className="w-24 bg-neutral-900 border border-neutral-700/80 rounded px-2 py-1 text-xs text-neutral-200"
-                            placeholder="To"
+                            placeholder={lang === "th" ? "ไปยังสถานะ" : "To state"}
                           />
                           <input
                             type="text"
@@ -965,10 +1045,11 @@ export default function ChartWizardModal({
                               setStateTransitions(updated);
                             }}
                             className="col-span-4 row-start-2 min-w-0 w-full sm:col-auto sm:row-auto sm:flex-1 bg-neutral-900 border border-neutral-700/80 rounded px-2 py-1 text-xs text-neutral-200"
-                            placeholder="Label (Action)"
+                            placeholder={lang === "th" ? "ชื่อการทำงาน" : "Action label"}
                           />
                           <button
                             type="button"
+                            aria-label={lang === "th" ? `ลบการเปลี่ยนสถานะที่ ${idx + 1}` : `Remove transition ${idx + 1}`}
                             onClick={() => setStateTransitions(stateTransitions.filter((_, i) => i !== idx))}
                             disabled={stateTransitions.length <= 1}
                             className="col-start-4 row-start-1 sm:col-auto sm:row-auto text-neutral-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer"
@@ -1008,26 +1089,35 @@ export default function ChartWizardModal({
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-400">
                     <Code className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{lang === "th" ? "แก้ไขโค้ด Mermaid ดิบ" : "Raw Mermaid Editor"}</span>
+                    <span>{lang === "th" ? "ต้นฉบับ Mermaid" : "Mermaid source"}</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => setCustomCode(generatedVisualCode)}
+                    onClick={handleResetCodeFromVisual}
                     className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-200 cursor-pointer"
-                    title="โหลดโค้ดจากแบบฟอร์มภาพ"
+                    title={lang === "th" ? "แทนที่ด้วยค่าจากแบบฟอร์ม" : "Replace with form values"}
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>{lang === "th" ? "ดึงค่าจาก Visual" : "Reset from Visual"}</span>
+                    <span>{lang === "th" ? "ใช้ค่าจากแบบฟอร์ม" : "Use form values"}</span>
                   </button>
                 </div>
+                {customCodeDirty && <p role="status" className="text-[11px] text-amber-300/90">
+                  {customCodeEdited
+                    ? (lang === "th" ? "โค้ดนี้แก้แยกจากฟอร์ม ถ้าใช้ค่าจากฟอร์ม โค้ดนี้จะถูกแทนที่" : "Using form values will replace these source edits.")
+                    : (lang === "th" ? "ใช้ Mermaid จากแม่แบบ" : "Using the selected template's Mermaid source.")}
+                </p>}
 
                 <div className="flex-1 flex flex-col relative rounded-md overflow-hidden border border-[#222634] bg-[#161922]">
                   <textarea
                     aria-label={lang === "th" ? "โค้ด Mermaid" : "Mermaid source"}
                     value={customCode}
-                    onChange={(e) => setCustomCode(e.target.value)}
+                    onChange={(e) => {
+                      setCustomCode(e.target.value);
+                      setCustomCodeDirty(true);
+                      setCustomCodeEdited(true);
+                    }}
                     className="w-full flex-1 p-4 font-mono text-xs text-neutral-200 bg-transparent focus:outline-none resize-none leading-relaxed"
-                    placeholder="Enter Mermaid diagram syntax..."
+                    placeholder={lang === "th" ? "พิมพ์ Mermaid" : "Enter Mermaid syntax"}
                     spellCheck={false}
                   />
                   <div className="px-4 py-2 border-t border-[#222634] text-right text-[11px] text-neutral-400 font-mono">
@@ -1050,7 +1140,7 @@ export default function ChartWizardModal({
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {hasCode ? <MermaidChart chart={activeMermaidCode} studio onValidationChange={handleValidationChange} /> :
+              {hasCode ? <MermaidChart lang={lang} chart={activeMermaidCode} studio onValidationChange={handleValidationChange} /> :
                 <p className="px-2 py-12 text-center text-xs text-neutral-500">{lang === "th" ? "พิมพ์โค้ด Mermaid เพื่อดูแผนภาพ" : "Write Mermaid code to preview the diagram."}</p>}
             </div>
           </div>

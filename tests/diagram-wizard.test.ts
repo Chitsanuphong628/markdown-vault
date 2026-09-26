@@ -9,6 +9,10 @@ import {
   generateStateDiagram,
   sanitizeLabel,
   attachThemeDirective,
+  attachMindmapThemeDirective,
+  attachFlowchartThemeDirective,
+  addSvgBackground,
+  MERMAID_EXPORT_BACKGROUND,
   FlowNode,
 } from "../src/components/charts/mermaidGenerators";
 import { DIAGRAM_TEMPLATES } from "../src/components/charts/diagramTemplates";
@@ -49,6 +53,59 @@ test("generateFlowchart produces valid syntax with decision branches and custom 
   assert.match(chart, /DB\[\("บันทึกฐานข้อมูล"\)\]/);
   assert.match(chart, /Check -->\|"ผ่าน"\| Pass/);
   assert.match(chart, /Check -->\|"ไม่ผ่าน"\| Fail/);
+  assert.match(chart, /class Check flowDecision/);
+  assert.match(chart, /classDef flowDecision/);
+});
+
+test("generateFlowchart assigns readable semantic tones and colors yes/no paths", () => {
+  const chart = generateFlowchart({
+    direction: "TD",
+    nodes: [
+      { id: "Start", label: "เริ่ม", shape: "round" },
+      { id: "Check", label: "พร้อมหรือไม่", shape: "diamond", branches: [
+        { targetId: "Done", label: "ใช่" },
+        { targetId: "Help", label: "ไม่" },
+      ] },
+      { id: "Done", label: "เสร็จ", shape: "round", tone: "success" },
+      { id: "Help", label: "แก้ปัญหา", shape: "rect", tone: "danger" },
+    ],
+  });
+
+  assert.match(chart, /class Start flowStart/);
+  assert.match(chart, /class Check flowDecision/);
+  assert.match(chart, /class Done flowSuccess/);
+  assert.match(chart, /class Help flowDanger/);
+  assert.match(chart, /linkStyle 1 stroke:#34d399,color:#34d399/);
+  assert.match(chart, /linkStyle 2 stroke:#fb7185,color:#fb7185/);
+});
+
+test("flowchart edge colors do not infer yes or no from substrings in ordinary words", () => {
+  const ordinaryLabels = generateFlowchart({
+    direction: "TD",
+    nodes: [
+      { id: "Check", label: "Check", shape: "diamond", branches: [
+        { targetId: "Innovation", label: "Innovation" },
+        { targetId: "Knowledge", label: "Knowledge" },
+      ] },
+      { id: "Innovation", label: "Innovation", shape: "rect" },
+      { id: "Knowledge", label: "Knowledge", shape: "rect" },
+    ],
+  });
+  assert.doesNotMatch(ordinaryLabels, /linkStyle/);
+
+  const semanticLabels = generateFlowchart({
+    direction: "TD",
+    nodes: [
+      { id: "Check", label: "Check", shape: "diamond", branches: [
+        { targetId: "Reject", label: "No" },
+        { targetId: "Accept", label: "Yes" },
+      ] },
+      { id: "Reject", label: "Reject", shape: "rect" },
+      { id: "Accept", label: "Accept", shape: "rect" },
+    ],
+  });
+  assert.match(semanticLabels, /linkStyle 0 stroke:#fb7185,color:#fb7185/);
+  assert.match(semanticLabels, /linkStyle 1 stroke:#34d399,color:#34d399/);
 });
 
 test("flowchart connects steps around a decision without joining sibling outcomes", () => {
@@ -164,8 +221,58 @@ test("generateMindmap produces multi-level hierarchy", () => {
 
   assert.match(chart, /^mindmap/);
   assert.match(chart, /root\(\("Nota Vault"\)\)/);
-  assert.match(chart, /\["Security"\]/);
-  assert.match(chart, /\("Session Version"\)/);
+  assert.match(chart, /branch0\["`\*\*Security\*\*`"\]/);
+  assert.match(chart, /sub0_0\("Session Version"\)/);
+});
+
+test("generateMindmap includes a purpose line under each main topic and styles descendants as leaves", () => {
+  const chart = generateMindmap({
+    root: "โครงการ",
+    branches: [
+      { label: "เป้าหมาย", purpose: "ลดเวลาทำงาน", subBranches: ["ค้นหาง่าย", "บันทึกเร็ว"] },
+      { label: "Research", purpose: "หาเหตุผล", subBranches: ["ไทย", "English"] },
+    ],
+  });
+
+  assert.match(chart, /branch0\["`\*\*เป้าหมาย\*\*\n\*ทำเพื่อ · ลดเวลาทำงาน\*`"\]/);
+  assert.match(chart, /branch1\["`\*\*Research\*\*\n\*ทำเพื่อ · หาเหตุผล\*`"\]/);
+  assert.match(chart, /sub0_0\("ค้นหาง่าย"\)/);
+  assert.match(chart, /:::leaf/);
+});
+
+test("generateMindmap localizes the optional purpose label", () => {
+  const chart = generateMindmap({
+    root: "Project",
+    purposeLabel: "Purpose",
+    branches: [{ label: "Goals", purpose: "reduce review time" }],
+  });
+
+  assert.match(chart, /\*Purpose · reduce review time\*/);
+  assert.doesNotMatch(chart, /ทำเพื่อ/);
+});
+
+test("generateMindmap handles an empty purpose and a full eight-branch palette", () => {
+  const branches = Array.from({ length: 8 }, (_, index) => ({
+    label: `หัวข้อ ${index + 1}`,
+    purpose: index === 0 ? "" : `Purpose ${index + 1}`,
+    subBranches: [`รายละเอียด ${index + 1}`],
+  }));
+  const chart = generateMindmap({ root: "แผน", branches });
+
+  assert.match(chart, /branch0\["`\*\*หัวข้อ 1\*\*`"\]/);
+  assert.doesNotMatch(chart, /ทำเพื่อ ·  /);
+  assert.match(chart, /branch7\["`\*\*หัวข้อ 8\*\*\n\*ทำเพื่อ · Purpose 8\*`"\]/);
+  assert.equal((chart.match(/:::main-branch/g) || []).length, 8);
+});
+
+test("generateMindmap keeps special characters in purpose tags from changing Mermaid structure", () => {
+  const chart = generateMindmap({
+    root: "แผน",
+    branches: [{ label: "หัวข้อ", purpose: "`code` **bold** [details]\nnext line" }],
+  });
+
+  assert.match(chart, /ทำเพื่อ · code bold details next line/);
+  assert.equal((chart.match(/\n/g) || []).length, 4);
 });
 
 test("generateStateDiagram produces valid state machine transitions", () => {
@@ -191,6 +298,28 @@ test("attachThemeDirective prefixes chart with init themeVariables directive", (
   assert.match(withTheme, /flowchart LR\n    A --> B$/);
 });
 
+test("generated mindmap and workflow use their own high-contrast curved themes", () => {
+  const mindmap = attachMindmapThemeDirective("mindmap\n  root((Topic))");
+  const workflow = attachFlowchartThemeDirective("flowchart TD\n  Start --> End");
+
+  assert.match(mindmap, /'theme': 'base'/);
+  assert.match(mindmap, /'cScale0':'#2563eb'/);
+  assert.match(mindmap, /mindmap-node\.leaf/);
+  assert.match(mindmap, /edge-depth-1\{stroke-width:2\.5px!important\}/);
+  assert.match(mindmap, /'background':'#161922'/);
+  assert.match(workflow, /'background':'#161922'/);
+  assert.match(workflow, /'curve':'basis'/);
+  assert.match(workflow, /'theme':'base'/);
+});
+
+test("SVG export background follows the diagram canvas and its viewBox", () => {
+  const svg = '<svg viewBox="-8 -4 320.5 180"><path d="M0 0"/></svg>';
+  const rendered = addSvgBackground(svg, MERMAID_EXPORT_BACKGROUND);
+
+  assert.match(rendered, /<rect x="-8" y="-4" width="320\.5" height="180" fill="#161922" data-mermaid-background="true"\/>/);
+  assert.ok(rendered.indexOf("data-mermaid-background") < rendered.indexOf("<path"));
+});
+
 test("DIAGRAM_TEMPLATES contains 8 complete, valid curated templates", () => {
   assert.equal(DIAGRAM_TEMPLATES.length, 8);
 
@@ -201,4 +330,7 @@ test("DIAGRAM_TEMPLATES contains 8 complete, valid curated templates", () => {
     assert.ok(t.badge.length > 0, "Badge missing");
     assert.ok(t.mermaidCode.trim().length > 20, `Template ${t.id} code is too short`);
   }
+
+  assert.match(DIAGRAM_TEMPLATES.find((template) => template.id === "auth-flow")!.mermaidCode, /class Alert flowDanger/);
+  assert.match(DIAGRAM_TEMPLATES.find((template) => template.id === "feature-mindmap")!.mermaidCode, /ทำเพื่อ ·/);
 });

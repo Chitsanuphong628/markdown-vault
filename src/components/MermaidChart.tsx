@@ -15,13 +15,15 @@ import {
   Code,
   AlertCircle,
 } from "lucide-react";
+import { addSvgBackground, MERMAID_EXPORT_BACKGROUND } from "./charts/mermaidGenerators";
+import { I18N_DIAGRAM, type Language } from "@/lib/i18n";
 
 mermaid.initialize({
   startOnLoad: false,
   theme: "dark",
   themeVariables: {
     darkMode: true,
-    background: "#16161e",
+    background: MERMAID_EXPORT_BACKGROUND,
     primaryColor: "#6366f1",
     primaryTextColor: "#f4f4f5",
     primaryBorderColor: "#818cf8",
@@ -34,13 +36,16 @@ mermaid.initialize({
 
 interface MermaidChartProps {
   chart: string;
+  lang?: Language;
   studio?: boolean;
   onValidationChange?: (code: string, valid: boolean) => void;
 }
 
 interface ChartToolbarProps {
+  lang: Language;
   scale: number;
   copied: boolean;
+  copyFailed: boolean;
   showSource: boolean;
   isFullscreen: boolean;
   onZoomIn: () => void;
@@ -56,8 +61,10 @@ interface ChartToolbarProps {
 }
 
 function ChartToolbar({
+  lang,
   scale,
   copied,
+  copyFailed,
   showSource,
   isFullscreen,
   onZoomIn,
@@ -71,12 +78,14 @@ function ChartToolbar({
   hideSource = false,
   compact = false,
 }: ChartToolbarProps) {
+  const t = I18N_DIAGRAM[lang];
   return (
     <div className={`flex items-center gap-1 px-2.5 py-1.5 text-neutral-300 text-xs select-none ${compact ? "bg-transparent" : "rounded-xl border border-neutral-700/60 bg-neutral-900/90 shadow-xl"}`}>
       <button
         type="button"
         onClick={onZoomIn}
-        title="ซูมเข้า (Zoom In)"
+        title={t.zoomIn}
+        aria-label={t.zoomIn}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
         <ZoomIn className="w-4 h-4" />
@@ -87,7 +96,8 @@ function ChartToolbar({
       <button
         type="button"
         onClick={onZoomOut}
-        title="ซูมออก (Zoom Out)"
+        title={t.zoomOut}
+        aria-label={t.zoomOut}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
         <ZoomOut className="w-4 h-4" />
@@ -95,7 +105,8 @@ function ChartToolbar({
       <button
         type="button"
         onClick={onReset}
-        title="รีเซ็ตตำแหน่งและขนาด (Reset View)"
+        title={t.resetView}
+        aria-label={t.resetView}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
         <RotateCcw className="w-4 h-4" />
@@ -107,7 +118,8 @@ function ChartToolbar({
       {!hideSource && <button
         type="button"
         onClick={onToggleSource}
-        title={showSource ? "ซ่อนโค้ด Mermaid" : "ดูโค้ด Mermaid"}
+        title={showSource ? t.hideSource : t.showSource}
+        aria-label={showSource ? t.hideSource : t.showSource}
         className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
           showSource ? "bg-indigo-600/30 text-indigo-400" : "hover:bg-neutral-800 hover:text-white text-neutral-300"
         }`}
@@ -119,17 +131,19 @@ function ChartToolbar({
       <button
         type="button"
         onClick={onCopy}
-        title="คัดลอกโค้ด Mermaid"
+        title={copyFailed ? t.copyFailed : t.copySource}
+        aria-label={copyFailed ? t.copyFailed : t.copySource}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
-        {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-neutral-300" />}
+        {copied ? <Check className="w-4 h-4 text-emerald-400" /> : copyFailed ? <AlertCircle className="w-4 h-4 text-rose-300" /> : <Copy className="w-4 h-4 text-neutral-300" />}
       </button>
 
       {/* Download SVG */}
       <button
         type="button"
         onClick={onDownloadSvg}
-        title="ดาวน์โหลดเป็นไฟล์เวกเตอร์ SVG"
+        title={t.downloadSvg}
+        aria-label={t.downloadSvg}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
         <Download className="w-4 h-4" />
@@ -139,7 +153,8 @@ function ChartToolbar({
       <button
         type="button"
         onClick={onDownloadPng}
-        title="ดาวน์โหลดเป็นภาพ PNG คมชัด (2x Retina)"
+        title={t.downloadPng}
+        aria-label={t.downloadPng}
         className="p-1.5 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer text-sky-400"
       >
         <ImageIcon className="w-4 h-4" />
@@ -151,16 +166,19 @@ function ChartToolbar({
       <button
         type="button"
         onClick={onToggleFullscreen}
-        title={isFullscreen ? "ย่อหน้าจอ (Exit Fullscreen)" : "ขยายเต็มจอ (Fullscreen)"}
+        title={isFullscreen ? t.exitFullscreen : t.fullscreen}
+        aria-label={isFullscreen ? t.exitFullscreen : t.fullscreen}
         className="p-1.5 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer text-indigo-400"
       >
         {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
       </button>
+      {copyFailed && <span role="status" className="sr-only">{t.copyFailed}</span>}
     </div>
   );
 }
 
-export default function MermaidChart({ chart, studio = false, onValidationChange }: MermaidChartProps) {
+export default function MermaidChart({ chart, lang = "en", studio = false, onValidationChange }: MermaidChartProps) {
+  const t = I18N_DIAGRAM[lang];
   const [svgContent, setSvgContent] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
@@ -172,7 +190,9 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [errorCopied, setErrorCopied] = useState(false);
+  const [exportNotice, setExportNotice] = useState("");
 
   const handleReset = useCallback(() => {
     setScale(1);
@@ -205,8 +225,11 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
 
       try {
         const { svg } = await mermaid.render(id, chart);
+        const svgWithBackground = chart.includes(`'background':'${MERMAID_EXPORT_BACKGROUND}'`)
+          ? addSvgBackground(svg)
+          : svg;
         if (isMounted) {
-          setSvgContent(svg);
+          setSvgContent(svgWithBackground);
           setError(null);
           onValidationChange?.(chart, true);
         }
@@ -280,23 +303,36 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
   };
 
   // Copy Mermaid source code
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(chart);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(chart);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+    }
   };
 
   // Copy error message
-  const handleCopyError = () => {
+  const handleCopyError = async () => {
     if (!error) return;
-    navigator.clipboard.writeText(`${error}\n\nCode:\n${chart}`);
-    setErrorCopied(true);
-    setTimeout(() => setErrorCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(`${error}\n\nCode:\n${chart}`);
+      setCopyFailed(false);
+      setErrorCopied(true);
+      setTimeout(() => setErrorCopied(false), 2000);
+    } catch {
+      setErrorCopied(false);
+      setCopyFailed(true);
+    }
   };
 
   // Download SVG
   const handleDownloadSvg = () => {
     if (!svgContent) return;
+    setExportNotice("");
     const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -311,11 +347,12 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
   // Download high-resolution PNG (2x Retina scale)
   const handleDownloadPng = () => {
     if (!svgContent) return;
+    setExportNotice("");
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(svgContent, "image/svg+xml");
       const svgElem = doc.querySelector("svg");
-      if (!svgElem) return;
+      if (!svgElem) { setExportNotice(t.exportFailed); return; }
 
       const viewBox = svgElem.viewBox?.baseVal;
       const width = viewBox?.width || parseFloat(svgElem.getAttribute("width") || "800") || 800;
@@ -326,7 +363,7 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
       canvas.width = Math.max(width * scaleFactor, 400);
       canvas.height = Math.max(height * scaleFactor, 300);
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) { setExportNotice(t.exportFailed); return; }
 
       const img = new Image();
       const svgXml = new XMLSerializer().serializeToString(svgElem);
@@ -335,7 +372,7 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
 
       img.onload = () => {
         // High quality dark canvas background
-        ctx.fillStyle = "#16161e";
+        ctx.fillStyle = MERMAID_EXPORT_BACKGROUND;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -348,9 +385,14 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        setExportNotice(t.exportFailed);
+      };
       img.src = url;
     } catch (err) {
       console.error("Failed to export diagram as PNG:", err);
+      setExportNotice(t.exportFailed);
     }
   };
 
@@ -360,20 +402,20 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
         <div className="flex items-center justify-between gap-2 text-rose-400 font-semibold mb-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>Mermaid Syntax Error</span>
+            <span>{t.syntaxError}</span>
           </div>
           <button
             type="button"
-            onClick={handleCopyError}
+            onClick={() => void handleCopyError()}
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 transition-colors cursor-pointer"
           >
             {errorCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{errorCopied ? "คัดลอกแล้ว" : "คัดลอกข้อผิดพลาด"}</span>
+            <span>{errorCopied ? t.copied : t.copyError}</span>
           </button>
         </div>
         <p className="text-rose-300/90 whitespace-pre-wrap leading-relaxed">{error}</p>
         {!studio && <div className="mt-3">
-          <div className="text-[11px] text-neutral-500 mb-1">Source Code:</div>
+          <div className="text-[11px] text-neutral-500 mb-1">{t.source}</div>
           <pre className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
             {chart}
           </pre>
@@ -389,8 +431,10 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
         {/* Floating Toolbar on Hover / Focus */}
         <div className={studio ? "flex justify-end overflow-x-auto border-b border-neutral-800 p-2" : "absolute top-3 right-3 z-10 opacity-75 group-hover:opacity-100 transition-opacity"}>
           <ChartToolbar
+            lang={lang}
             scale={scale}
             copied={copied}
+            copyFailed={copyFailed}
             showSource={showSource}
             isFullscreen={isFullscreen}
             onZoomIn={handleZoomIn}
@@ -405,6 +449,7 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
             compact={studio}
           />
         </div>
+        {exportNotice && <div role="alert" className="absolute bottom-2 left-2 z-20 rounded bg-rose-950/95 px-3 py-2 text-xs text-rose-200">{exportNotice}</div>}
 
         {/* Pure Vector SVG Viewport (NO IFRAME) */}
         <div
@@ -434,15 +479,15 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
             <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 mb-2">
               <span className="flex items-center gap-1.5">
                 <Code className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Mermaid Source Code</span>
+                <span>{t.source}</span>
               </span>
               <button
                 type="button"
-                onClick={handleCopyCode}
+          onClick={() => void handleCopyCode()}
                 className="flex items-center gap-1 text-neutral-300 hover:text-white cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? "คัดลอกแล้ว" : "คัดลอก"}</span>
+                <span>{copied ? t.copied : t.copy}</span>
               </button>
             </div>
             <pre className="p-3 rounded-xl bg-neutral-900 border border-neutral-800 font-mono text-xs text-neutral-200 overflow-x-auto leading-relaxed">
@@ -453,8 +498,8 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
 
         {/* Footer Hint text */}
         {!studio && <div className="px-4 py-2 bg-neutral-900/60 border-t border-neutral-800/60 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-          <span>คลิกลากเพื่อเลื่อน (Pan) • Ctrl + ล้อเมาส์เพื่อซูม</span>
-          <span>Pure Vector SVG</span>
+          <span>{t.dragHint}</span>
+          <span>{t.vector}</span>
         </div>}
       </div>
 
@@ -465,15 +510,17 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-950/80">
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
-              <span className="text-sm font-semibold text-neutral-100">
-                Mermaid Diagram Viewer (Fullscreen Vector)
+                <span className="text-sm font-semibold text-neutral-100">
+                {lang === "th" ? "แผนภาพ Mermaid" : "Mermaid diagram"}
               </span>
             </div>
             <div className="flex items-center gap-3">
               <ChartToolbar
-                scale={scale}
-                copied={copied}
-                showSource={showSource}
+          lang={lang}
+          scale={scale}
+          copied={copied}
+          copyFailed={copyFailed}
+          showSource={showSource}
                 isFullscreen={isFullscreen}
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
@@ -508,7 +555,7 @@ export default function MermaidChart({ chart, studio = false, onValidationChange
             />
 
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-neutral-900/90 border border-neutral-700/60 px-5 py-2 rounded-full text-xs text-neutral-300 font-mono pointer-events-none shadow-2xl backdrop-blur-md">
-              คลิกลากเพื่อเลื่อน • หมุนล้อเมาส์เพื่อซูมเข้า-ออก • กด ESC เพื่อออก
+              {t.wheelHint}
             </div>
           </div>
         </div>

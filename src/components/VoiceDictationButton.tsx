@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Sparkles, Loader2, Check } from "lucide-react";
-import { Language } from "@/lib/i18n";
+import { Mic, MicOff } from "lucide-react";
+import { I18N_MAIN, Language } from "@/lib/i18n";
 import { getShortcuts, matchesShortcut, formatComboDisplay } from "@/lib/shortcuts";
 
 interface VoiceDictationButtonProps {
@@ -19,6 +19,8 @@ export default function VoiceDictationButton({
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [interimText, setInterimText] = useState("");
+  const [speechError, setSpeechError] = useState("");
+  const t = I18N_MAIN[lang];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const onTranscriptRef = useRef(onTranscript);
@@ -66,6 +68,14 @@ export default function VoiceDictationButton({
     recognition.onerror = (event: { error: string }) => {
       if (event.error !== "no-speech") {
         console.warn("Speech recognition error:", event.error);
+        const message = event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? t.voicePermissionError
+          : event.error === "audio-capture"
+            ? t.voiceMicError
+            : event.error === "network"
+              ? t.voiceNetworkError
+              : t.voiceStartError;
+        setSpeechError(message);
       }
       setIsListening(false);
       setInterimText("");
@@ -85,7 +95,7 @@ export default function VoiceDictationButton({
         // Ignore cleanup stop errors
       }
     };
-  }, [lang]);
+  }, [lang, t]);
 
   const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return;
@@ -96,14 +106,16 @@ export default function VoiceDictationButton({
       setInterimText("");
     } else {
       try {
+        setSpeechError("");
         recognitionRef.current.lang = lang === "th" ? "th-TH" : "en-US";
         recognitionRef.current.start();
         setIsListening(true);
       } catch (err) {
         console.error("Failed to start speech recognition", err);
+        setSpeechError(t.voiceStartError);
       }
     }
-  }, [isListening, lang]);
+  }, [isListening, lang, t]);
 
   const [voiceShortcut, setVoiceShortcut] = useState(() => getShortcuts().voice);
 
@@ -138,7 +150,7 @@ export default function VoiceDictationButton({
   }
 
   const displayKey = formatComboDisplay(voiceShortcut) || "⌥Space";
-  const label = lang === "th" ? (isListening ? "กำลังฟัง..." : "จดด้วยเสียง") : (isListening ? "Listening..." : "Voice Note");
+  const label = isListening ? t.listening : t.voiceNote;
   const shortcutHint = `${displayKey} ${lang === "th" ? "หรือ" : "or"} ⌘J`;
 
   return (
@@ -147,24 +159,23 @@ export default function VoiceDictationButton({
         type="button"
         onClick={toggleListening}
         title={`${label} (${shortcutHint})`}
-        className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+        aria-label={label}
+        aria-pressed={isListening}
+        className={`flex h-10 w-10 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer sm:w-auto sm:px-3 ${
           isListening
-            ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm animate-pulse"
+            ? "bg-rose-500/15 text-rose-300 border border-rose-500/40"
             : "bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50"
         } ${className}`}
       >
         {isListening ? (
           <>
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-            </span>
-            <MicOff className="w-3.5 h-3.5 text-rose-400" />
+            <span className="flex h-2 w-2 rounded-full bg-rose-400 sm:hidden" aria-hidden="true" />
+            <MicOff className="hidden h-3.5 w-3.5 text-rose-400 sm:block" />
             <span className="text-rose-300">{label}</span>
           </>
         ) : (
           <>
-            <Mic className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
+            <Mic className="h-3.5 w-3.5 text-neutral-400" />
             <span className="hidden sm:inline">{label}</span>
           </>
         )}
@@ -172,14 +183,15 @@ export default function VoiceDictationButton({
 
       {/* Floating Interim transcription preview */}
       {isListening && interimText && (
-        <div className="absolute top-full mt-2 left-0 z-50 min-w-[220px] max-w-sm bg-neutral-900/95 border border-rose-500/40 rounded-xl p-2.5 shadow-2xl backdrop-blur-md text-xs text-rose-200 italic animate-in fade-in">
+        <div className="absolute left-0 top-full z-50 mt-2 min-w-[220px] max-w-sm rounded-lg border border-rose-500/40 bg-neutral-900 p-2.5 text-xs italic text-rose-200 shadow-xl">
           <div className="flex items-center gap-1.5 text-[10px] text-rose-400 font-semibold uppercase tracking-wider mb-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
-            {lang === "th" ? "กำลังประมวลผลคำพูด..." : "Transcribing..."}
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+            {t.transcribing}
           </div>
           &ldquo;{interimText}&rdquo;
         </div>
       )}
+      {speechError && <span role="alert" className="absolute left-0 top-full z-50 mt-2 w-64 rounded-lg border border-rose-500/40 bg-neutral-900 p-2.5 text-xs text-rose-200 shadow-xl">{speechError}</span>}
     </div>
   );
 }

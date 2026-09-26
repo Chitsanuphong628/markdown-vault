@@ -5,6 +5,7 @@ import { assertOwnedFolder } from "@/lib/ownership";
 import { escapePostgrestSearch, rejectCrossOrigin } from "@/lib/security";
 import { z } from "zod";
 import { isNoteColorKey, parseNoteTheme } from "@/lib/noteTheme";
+import { buildNoteSearchExcerpt } from "@/lib/noteSearch";
 
 const noteSchema = z.object({
   title: z.string().trim().min(1).max(240),
@@ -29,7 +30,9 @@ export async function GET(req: Request) {
 
   let query = getSupabaseAdmin()
     .from("Note")
-    .select("id, title, themeColor, folderId, createdAt, updatedAt, revision")
+    .select(q
+      ? "id, title, content, themeColor, folderId, createdAt, updatedAt, revision"
+      : "id, title, themeColor, folderId, createdAt, updatedAt, revision")
     .eq("userId", user.id)
     .order("updatedAt", { ascending: false });
 
@@ -54,6 +57,7 @@ export async function GET(req: Request) {
     createdAt: string;
     updatedAt: string;
     revision: number;
+    content?: string;
   }) => {
     const color = isNoteColorKey(n.themeColor) ? n.themeColor : "default";
     return {
@@ -64,6 +68,7 @@ export async function GET(req: Request) {
       updatedAt: n.updatedAt,
       revision: n.revision,
       color,
+      ...(q ? { excerpt: buildNoteSearchExcerpt(n.content || "", q) } : {}),
     };
   });
 

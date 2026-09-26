@@ -35,9 +35,11 @@ import {
   X,
 } from "lucide-react";
 import TableOfContents, { HeadingItem } from "./TableOfContents";
-import { Language, I18N_MAIN } from "@/lib/i18n";
+import { Language, I18N_DIAGRAM, I18N_MAIN } from "@/lib/i18n";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 import { parseNoteTheme, NOTE_THEMES } from "@/lib/noteTheme";
 import { getShortcuts, matchesShortcut } from "@/lib/shortcuts";
+import { GfmAlertMarkdownBlockquote } from "@/components/GfmAlertCard";
 
 // Register core languages for high performance & minimal bundle size
 hljs.registerLanguage("javascript", javascript);
@@ -67,15 +69,19 @@ hljs.registerLanguage("c", cpp);
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeSlug, rehypeKatex];
 
-// Lazy-load MermaidChart so the massive ~1.5MB mermaid bundle is only fetched when a diagram exists
+function DiagramLoading() {
+  const [lang] = useLanguagePreference();
+  return (
+    <div role="status" aria-label={lang === "th" ? "กำลังโหลดแผนภาพ" : "Loading diagram"} className="h-44 my-4 flex items-center justify-center bg-neutral-900/60 rounded-xl border border-neutral-800">
+      <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+// Lazy-load MermaidChart so the large Mermaid bundle is only fetched when a diagram exists.
 const MermaidChart = dynamic(() => import("./MermaidChart"), {
   ssr: false,
-  loading: () => (
-    <div className="h-44 my-4 flex flex-col items-center justify-center bg-neutral-900/60 rounded-xl border border-neutral-800 animate-pulse text-xs text-neutral-400 gap-2">
-      <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      <span>Loading diagram...</span>
-    </div>
-  ),
+  loading: () => <DiagramLoading />,
 });
 
 interface MarkdownViewerProps {
@@ -97,6 +103,7 @@ interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   className?: string;
   children?: React.ReactNode;
   block?: boolean;
+  uiLanguage?: Language;
 }
 
 function escapeHtml(value: string): string {
@@ -136,13 +143,15 @@ function getHighlightedSnippet(rawCode: string, language: string): string {
   return highlighted;
 }
 
-function CodeBlock({ className, children, block = false, ...props }: CodeBlockProps) {
+function CodeBlock({ className, children, block = false, uiLanguage = "en", ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const isInline = !block;
   const rawCode = String(children).replace(/\n$/, "");
   const match = /language-(\w+)/.exec(className || "");
   const language = match ? match[1] : "text";
   const isMermaid = !isInline && language === "mermaid";
+  const diagramText = I18N_DIAGRAM[uiLanguage];
 
   // Perform Highlight.js colorization (cached for 0ms re-renders)
   const highlightedHtml = useMemo(() => {
@@ -160,13 +169,19 @@ function CodeBlock({ className, children, block = false, ...props }: CodeBlockPr
 
   // If language is mermaid, render dynamic chart
   if (isMermaid) {
-    return <MermaidChart chart={rawCode} />;
+    return <MermaidChart lang={uiLanguage} chart={rawCode} />;
   }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(rawCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(rawCode);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+    }
   };
 
   return (
@@ -174,22 +189,26 @@ function CodeBlock({ className, children, block = false, ...props }: CodeBlockPr
       <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 text-xs font-mono text-neutral-400">
         <span className="uppercase tracking-wider font-semibold text-neutral-300">{language}</span>
         <button
-          onClick={handleCopy}
+          type="button"
+          onClick={() => void handleCopy()}
+          title={copyFailed ? diagramText.copyFailed : copied ? diagramText.copied : diagramText.copy}
+          aria-label={copyFailed ? diagramText.copyFailed : copied ? diagramText.copied : diagramText.copy}
           className="flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-neutral-800 transition-colors text-neutral-300 text-xs cursor-pointer"
         >
           {copied ? (
             <>
               <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">คัดลอกแล้ว</span>
+              <span className="text-emerald-400 font-medium">{diagramText.copied}</span>
             </>
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>คัดลอก</span>
+              <span>{diagramText.copy}</span>
             </>
           )}
         </button>
       </div>
+      {copyFailed && <span role="status" className="sr-only">{diagramText.copyFailed}</span>}
       <pre className="p-4 overflow-x-auto text-sm leading-relaxed font-mono">
         <code
           className={`hljs language-${language}`}
@@ -254,11 +273,26 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
   // Memoized custom Markdown components
   const markdownComponents = useMemo(
     () => ({
-      code: CodeBlock,
+      code: (props: CodeBlockProps) => <CodeBlock {...props} uiLanguage={lang} />,
+      blockquote: ({ node, children, className, ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement> & {
+        node?: { position?: { start?: { offset?: number }; end?: { offset?: number } } };
+      }) => {
+        return (
+          <GfmAlertMarkdownBlockquote
+            markdown={cleanContent}
+            markdownNode={node}
+            uiLanguage={lang}
+            className={className}
+            {...props}
+          >
+            {children}
+          </GfmAlertMarkdownBlockquote>
+        );
+      },
       pre: ({ children }: React.HTMLAttributes<HTMLPreElement>) => {
         const child = React.Children.toArray(children)[0];
         if (React.isValidElement<CodeBlockProps>(child)) {
-          return <CodeBlock block className={child.props.className}>{child.props.children}</CodeBlock>;
+          return <CodeBlock block uiLanguage={lang} className={child.props.className}>{child.props.children}</CodeBlock>;
         }
         return <pre>{children}</pre>;
       },
@@ -321,7 +355,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
         );
       },
     }),
-    [handleToggleExactLine, onUpdateContent, preview]
+    [cleanContent, handleToggleExactLine, lang, onUpdateContent, preview]
   );
 
   // Memoize ReactMarkdown rendering output so in-document search never triggers expensive re-parsing

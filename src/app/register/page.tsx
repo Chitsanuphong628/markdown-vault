@@ -5,87 +5,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
-  BookOpen,
   KeyRound,
   Mail,
   User,
   ArrowRight,
   Eye,
   EyeOff,
-  Sparkles,
   ShieldCheck,
-  CheckCircle2,
-  FolderTree,
-  FileCheck2,
+  Search,
+  Share2,
   Loader2,
 } from "lucide-react";
 import LanguageToggle from "@/components/LanguageToggle";
-
-const I18N = {
-  en: {
-    heroTag: "Create Your Vault",
-    heroTitle: "Structure Your Thoughts with Zero Friction",
-    heroDesc:
-      "Join developers and thinkers who organize, search, and visualize their Markdown notes in an ultra-fast, modern workspace.",
-    feature1Title: "Full-Text Knowledge Search",
-    feature1Desc: "Instantly query deep inside headings, code snippets, and body text across your vault.",
-    feature2Title: "Public Shareable Links",
-    feature2Desc: "Share polished documents with clean URLs and interactive table of contents.",
-    quote: "“Simple where you want it to be, remarkably powerful where you need it.”",
-    author: "Built with Next.js, Tailwind & Supabase",
-    signUpTitle: "Create your account",
-    signUpSub: "Start organizing your Markdown notes in seconds",
-    nameLabel: "Full Name",
-    namePlaceholder: "Alex Morgan",
-    emailLabel: "Email address",
-    emailPlaceholder: "name@company.com",
-    passwordLabel: "Password",
-    passwordPlaceholder: "At least 6 characters",
-    securityNotice: "We'll send a 6-digit verification code to confirm your email.",
-    signUpBtn: "Create account & continue",
-    signingUp: "Creating account...",
-    hasAccount: "Already have an account?",
-    signInLink: "Sign in instead",
-    strengthWeak: "Weak",
-    strengthFair: "Fair",
-    strengthGood: "Good",
-    strengthStrong: "Strong",
-  },
-  th: {
-    heroTag: "เริ่มต้นสร้างคลังความรู้ของคุณ",
-    heroTitle: "จัดระเบียบความคิดอย่างไร้รอยต่อ",
-    heroDesc:
-      "ร่วมใช้งานกับนักพัฒนาและผู้ใช้ทั่วโลกที่จัดการ ค้นหา และวาดไดอะแกรมในโน้ต Markdown บนพื้นที่ทำงานที่เร็วและทันสมัยที่สุด",
-    feature1Title: "ระบบค้นหาลึกระดับเนื้อหา (Full-text)",
-    feature1Desc: "ค้นหาได้ทันทีถึงเนื้อหาข้างใน โค้ด และหัวข้อย่อยทั้งหมดในคลังของคุณ",
-    feature2Title: "แชร์เอกสารสาธารณะได้ในคลิกเดียว",
-    feature2Desc: "สร้างลิงก์สำหรับส่งให้อ่านได้ทันที พร้อมสารบัญหัวข้อและไดอะแกรมสวยงาม",
-    quote: "“เรียบง่าย สบายตา แต่ทรงพลังในทุกฟังก์ชันที่คุณต้องการ”",
-    author: "พัฒนาด้วย Next.js, Tailwind & Supabase Cloud",
-    signUpTitle: "สร้างบัญชีใหม่",
-    signUpSub: "เริ่มต้นใช้งานคลังโน้ต Markdown ของคุณในไม่กี่วินาที",
-    nameLabel: "ชื่อแสดงผล",
-    namePlaceholder: "ชื่อของคุณ",
-    emailLabel: "อีเมล",
-    emailPlaceholder: "name@company.com",
-    passwordLabel: "รหัสผ่าน",
-    passwordPlaceholder: "อย่างน้อย 6 ตัวอักษร",
-    securityNotice: "ระบบจะส่งรหัสยืนยัน OTP 6 หลักไปยังอีเมลเพื่อความปลอดภัย",
-    signUpBtn: "สร้างบัญชีและดำเนินการต่อ",
-    signingUp: "กำลังสร้างบัญชี...",
-    hasAccount: "มีบัญชีอยู่แล้ว?",
-    signInLink: "เข้าสู่ระบบ",
-    strengthWeak: "ง่ายเกินไป",
-    strengthFair: "พอใช้",
-    strengthGood: "ดี",
-    strengthStrong: "แข็งแกร่งมาก",
-  },
-};
+import { AUTH_COPY, getRegisterError } from "@/lib/authCopy";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [lang, setLang] = useState<"en" | "th">("en");
-  const t = I18N[lang];
+  const [lang, setLang] = useLanguagePreference();
+  const t = AUTH_COPY[lang];
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -98,8 +36,8 @@ export default function RegisterPage() {
   const passwordStrength = useMemo(() => {
     if (!password) return 0;
     let score = 0;
-    if (password.length >= 6) score += 1;
     if (password.length >= 8) score += 1;
+    if (password.length >= 12) score += 1;
     if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score += 1;
     if (/[0-9]/.test(password) || /[^A-Za-z0-9]/.test(password)) score += 1;
     return score; // 0 to 4
@@ -108,13 +46,13 @@ export default function RegisterPage() {
   const strengthLabel = useMemo(() => {
     switch (passwordStrength) {
       case 1:
-        return { text: t.strengthWeak, color: "bg-rose-500", textColor: "text-rose-400" };
+        return { text: t.passwordWeak, color: "bg-rose-500", textColor: "text-rose-400" };
       case 2:
-        return { text: t.strengthFair, color: "bg-amber-500", textColor: "text-amber-400" };
+        return { text: t.passwordFair, color: "bg-amber-500", textColor: "text-amber-400" };
       case 3:
-        return { text: t.strengthGood, color: "bg-blue-500", textColor: "text-blue-400" };
+        return { text: t.passwordGood, color: "bg-blue-500", textColor: "text-blue-400" };
       case 4:
-        return { text: t.strengthStrong, color: "bg-emerald-500", textColor: "text-emerald-400" };
+        return { text: t.passwordStrong, color: "bg-emerald-500", textColor: "text-emerald-400" };
       default:
         return { text: "", color: "bg-neutral-800", textColor: "text-neutral-500" };
     }
@@ -134,7 +72,8 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to create account");
+        setError(getRegisterError(res.status, lang));
+        return;
       }
 
       if (data.requiresVerification) {
@@ -143,8 +82,8 @@ export default function RegisterPage() {
         router.push("/");
       }
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch {
+      setError(t.registerError);
     } finally {
       setLoading(false);
     }
@@ -152,7 +91,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen w-screen bg-[#090a0f] text-neutral-100 flex flex-col lg:flex-row overflow-x-hidden font-sans select-none">
-      {/* LEFT PANE: Hero Showcase */}
+      {/* Product summary */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#0e1017] via-[#090a0f] to-[#1a1129] border-r border-neutral-800/70 p-12 flex-col justify-between relative overflow-hidden">
         {/* Ambient Glows */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-purple-600/15 rounded-full blur-[140px] pointer-events-none" />
@@ -173,56 +112,43 @@ export default function RegisterPage() {
             <span className="text-lg font-bold tracking-tight text-white">
               Nota
             </span>
-            <span className="text-[11px] text-neutral-400">Intelligent Knowledge Cloud</span>
+            <span className="text-[11px] text-neutral-400">{t.productLabel}</span>
           </div>
         </div>
 
         {/* Center Content */}
         <div className="relative z-10 my-auto py-10 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-medium mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>{t.heroTag}</span>
-          </div>
-
           <h1 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight mb-4">
-            {t.heroTitle}
+            {t.registerTitle}
           </h1>
 
           <p className="text-neutral-400 text-sm sm:text-base leading-relaxed mb-8">
-            {t.heroDesc}
+            {t.registerDescription}
           </p>
 
           <div className="space-y-4">
             <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5">
               <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5">
-                <FolderTree className="w-4 h-4" />
+                <Search className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-neutral-200">{t.feature1Title}</h3>
-                <p className="text-xs text-neutral-400 mt-0.5">{t.feature1Desc}</p>
+                <h3 className="text-sm font-semibold text-neutral-200">{t.registerFeatureOne}</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">{t.registerFeatureOneDescription}</p>
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5">
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0 mt-0.5">
-                <FileCheck2 className="w-4 h-4" />
+                <Share2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-neutral-200">{t.feature2Title}</h3>
-                <p className="text-xs text-neutral-400 mt-0.5">{t.feature2Desc}</p>
+                <h3 className="text-sm font-semibold text-neutral-200">{t.registerFeatureTwo}</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">{t.registerFeatureTwoDescription}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Testimonial / Social Proof */}
-        <div className="relative z-10 pt-6 border-t border-neutral-800/60">
-          <p className="text-xs italic text-neutral-400">{t.quote}</p>
-          <div className="flex items-center gap-2 mt-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-[11px] text-neutral-500">{t.author}</span>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT PANE: Registration Form */}
@@ -251,9 +177,9 @@ export default function RegisterPage() {
         <div className="w-full max-w-md mx-auto my-auto py-8">
           <div className="mb-8">
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">
-              {t.signUpTitle}
+              {t.registerTitle}
             </h2>
-            <p className="text-neutral-400 text-sm">{t.signUpSub}</p>
+            <p className="text-neutral-400 text-sm">{t.registerFormDescription}</p>
           </div>
 
           {error && (
@@ -315,14 +241,17 @@ export default function RegisterPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   required
+                  minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t.passwordPlaceholder}
+                  placeholder={t.passwordMinLength}
                   className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl pl-10 pr-11 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? t.hidePassword : t.showPassword}
+                  title={showPassword ? t.hidePassword : t.showPassword}
                   className="absolute right-3.5 top-3.5 text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer"
                   tabIndex={-1}
                 >
@@ -348,7 +277,7 @@ export default function RegisterPage() {
             {/* Security Notice */}
             <div className="p-3 bg-neutral-950/60 border border-neutral-800/80 rounded-xl flex items-center gap-2.5 text-[11px] text-neutral-400">
               <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>{t.securityNotice}</span>
+              <span>{t.verificationNotice}</span>
             </div>
 
             {/* Submit Button */}
@@ -360,11 +289,11 @@ export default function RegisterPage() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{t.signingUp}</span>
+                  <span>{t.creatingAccount}</span>
                 </>
               ) : (
                 <>
-                  <span>{t.signUpBtn}</span>
+                  <span>{t.createAccountContinue}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -385,7 +314,7 @@ export default function RegisterPage() {
 
         {/* Global Footer Legal */}
         <div className="w-full max-w-md mx-auto pt-6 text-center text-[11px] text-neutral-600">
-          Nota &copy; 2026. Secure & Private Knowledge Management.
+          {t.footer}
         </div>
       </div>
     </div>

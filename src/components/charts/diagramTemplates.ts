@@ -1,3 +1,5 @@
+import { FLOWCHART_CLASS_DEFINITIONS } from "./mermaidGenerators";
+
 export interface DiagramTemplate {
   id: string;
   name: { en: string; th: string };
@@ -26,7 +28,16 @@ export const DIAGRAM_TEMPLATES: DiagramTemplate[] = [
     Validate -- "ไม่ถูกต้อง (Invalid)" --> Alert["แสดงแจ้งเตือนข้อผิดพลาด"]
     Alert --> Input
     Validate -- "ถูกต้อง (Valid)" --> CreateToken[("สร้าง Session Token")]
-    CreateToken --> Success(["เข้าสู่ระบบสำเร็จ (Success)"])`,
+    CreateToken --> Success(["เข้าสู่ระบบสำเร็จ (Success)"])
+    ${FLOWCHART_CLASS_DEFINITIONS.join("\n    ")}
+    class Start flowStart
+    class Input flowProcess
+    class Validate flowDecision
+    class Alert flowDanger
+    class CreateToken flowData
+    class Success flowSuccess
+    linkStyle 2 stroke:#fb7185,color:#fb7185,stroke-width:2px
+    linkStyle 4 stroke:#34d399,color:#34d399,stroke-width:2px`,
   },
   {
     id: "web-architecture",
@@ -44,7 +55,13 @@ export const DIAGRAM_TEMPLATES: DiagramTemplate[] = [
     Client["Client Browser"] --> CDN["Vercel Edge CDN"]
     CDN --> NextAPI["Next.js Serverless API"]
     NextAPI --> Redis[("Upstash Redis\\nSession Cache")]
-    NextAPI --> Supabase[("Supabase PostgreSQL\\nDatabase")]`,
+    NextAPI --> Supabase[("Supabase PostgreSQL\\nDatabase")]
+    ${FLOWCHART_CLASS_DEFINITIONS.join("\n    ")}
+    class Client flowProcess
+    class CDN flowSuccess
+    class NextAPI flowProcess
+    class Redis flowData
+    class Supabase flowData`,
   },
   {
     id: "api-sequence",
@@ -144,18 +161,33 @@ export const DIAGRAM_TEMPLATES: DiagramTemplate[] = [
     },
     mermaidCode: `mindmap
   root(("Nota Vault"))
-    ["ความปลอดภัย (Security)"]
-      ("Row Level Security")
-      ("One-Time Passcode")
-      ("Session Revocation")
-    ["การจัดการข้อมูล (Data)"]
-      ("Live Mermaid Charts")
-      ("Multi-format Export")
-      ("Real-time Search")
-    ["ประสบการณ์ผู้ใช้ (UX)"]
-      ("Voice Dictation")
-      ("Rich Visual Editor")
-      ("Note Theme Colors")`,
+    security["\`**ความปลอดภัย (Security)**
+*ทำเพื่อ · ปกป้องข้อมูลผู้ใช้*\`"]
+    :::main-branch
+      security1("Row Level Security")
+      :::leaf
+      security2("One-Time Passcode")
+      :::leaf
+      security3("Session Revocation")
+      :::leaf
+    data["\`**การจัดการข้อมูล (Data)**
+*ทำเพื่อ · ค้นหาและใช้ข้อมูลได้เร็ว*\`"]
+    :::main-branch
+      data1("Live Mermaid Charts")
+      :::leaf
+      data2("Multi-format Export")
+      :::leaf
+      data3("Real-time Search")
+      :::leaf
+    ux["\`**ประสบการณ์ผู้ใช้ (UX)**
+*ทำเพื่อ · จดและจัดการโน้ตได้ง่าย*\`"]
+    :::main-branch
+      ux1("Voice Dictation")
+      :::leaf
+      ux2("Rich Visual Editor")
+      :::leaf
+      ux3("Note Theme Colors")
+      :::leaf`,
   },
   {
     id: "erd-model",

@@ -7,8 +7,8 @@ const metadataBase = publicAppUrl ? new URL(publicAppUrl) : undefined;
 
 export const metadata: Metadata = {
   ...(metadataBase ? { metadataBase } : {}),
-  title: "Nota - Next-Gen Markdown & Knowledge Hub",
-  description: "Next-generation Markdown reading, visualization, and knowledge management platform.",
+  title: "Nota · Notes",
+  description: "Write, organize, and search notes. Edit Markdown whenever you need it.",
   ...(metadataBase
     ? {
         icons: {
@@ -22,8 +22,8 @@ export const metadata: Metadata = {
       }
     : {}),
   openGraph: {
-    title: "Nota - Next-Gen Markdown & Knowledge Hub",
-    description: "Next-generation Markdown reading, visualization, and knowledge management platform.",
+    title: "Nota · Notes",
+    description: "Write, organize, and search notes. Edit Markdown whenever you need it.",
     ...(metadataBase
       ? { images: [{ url: "/logo.png", width: 50, height: 50, alt: "Nota Logo" }] }
       : {}),

@@ -4,13 +4,10 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { FolderItem, NoteItem } from "@/components/Sidebar";
-import MarkdownViewer from "@/components/MarkdownViewer";
 import { AppLayoutSkeleton, NoteContentSkeleton } from "@/components/Skeletons";
 import {
   FileText,
   UploadCloud,
-  Edit3,
-  Save,
   Trash2,
   Share2,
   Check,
@@ -18,19 +15,20 @@ import {
   Lock,
   Search,
   Menu,
-  Plus,
-  Palette,
-  Code2,
+  RotateCcw,
 } from "lucide-react";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
-import { parseNoteTheme, applyNoteTheme, NOTE_THEMES, NoteColorKey } from "@/lib/noteTheme";
+import { parseNoteTheme } from "@/lib/noteTheme";
 import { Language, I18N_MAIN } from "@/lib/i18n";
-import { getShortcuts, matchesShortcut, formatComboDisplay, ShortcutActionId } from "@/lib/shortcuts";
+import { getShortcuts, matchesShortcut, formatComboDisplay } from "@/lib/shortcuts";
 import { NoteWriteCoordinator, type NotePatch, type EditableNote } from "@/lib/noteWriting";
 import type { MarkdownNoteEditorHandle } from "@/components/MarkdownNoteEditor";
 import type { RichNoteEditorHandle } from "@/components/RichNoteEditor";
 import { appendMarkdownBlock, getLatestNoteDraftContent, isNoteDraftDirty } from "@/lib/markdownEditing";
+import { readPreferredEditorMode as readStoredEditorMode, recordEditorModeChoice, type EditorMode } from "@/lib/editorModePreference";
 import { getRichEditorCompatibility, type RichEditorUnsupportedReason } from "@/lib/richEditorCompatibility";
+import { claimEditorTabId, discardNoteDraft, discardNoteDrafts, isNoteDraftFromCurrentEditor, listNoteDrafts, readNoteDraft, refreshEditorTabLease, releaseEditorTabLease, saveNoteDraft, selectNoteDraftForEditor, type NoteDraftRecord } from "@/lib/noteDraftStore";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 
 // Dynamically load heavy components only when opened or required
 const DropzoneModal = dynamic(() => import("@/components/DropzoneModal"), { ssr: false });
@@ -38,21 +36,26 @@ const SettingsModal = dynamic(() => import("@/components/SettingsModal"), { ssr:
 const ChartWizardModal = dynamic(() => import("@/components/ChartWizardModal"), { ssr: false });
 const MarkdownNoteEditor = dynamic(() => import("@/components/MarkdownNoteEditor"), {
   ssr: false,
-  loading: () => (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 text-neutral-400 text-xs gap-2">
-      <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      <span>Loading editor...</span>
-    </div>
-  ),
+  loading: () => <EditorLoading />,
 });
 const RichNoteEditor = dynamic(() => import("@/components/RichNoteEditor"), { ssr: false });
 
-type EditorMode = "visual" | "markdown";
-const EDITOR_MODE_STORAGE_KEY = "nota_preferred_editor_mode";
+type AutosaveState = "saved" | "saving" | "error";
+type DraftConflict = { remote: EditableNote; draft?: NoteDraftRecord; localDrafts?: NoteDraftRecord[] };
+
+function EditorLoading() {
+  const [lang] = useLanguagePreference();
+  return (
+    <div role="status" className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-xs text-neutral-400">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+      <span>{I18N_MAIN[lang].loadingEditor}</span>
+    </div>
+  );
+}
 
 function readPreferredEditorMode(): EditorMode {
   if (typeof window === "undefined") return "visual";
-  try { return localStorage.getItem(EDITOR_MODE_STORAGE_KEY) === "markdown" ? "markdown" : "visual"; }
+  try { return readStoredEditorMode(window.localStorage); }
   catch { return "visual"; }
 }
 
@@ -70,29 +73,34 @@ function unsupportedEditorMessage(reason: RichEditorUnsupportedReason, lang: Lan
     : `This note contains ${labels[reason].en}, so it opens in Markdown to preserve its content.`;
 }
 
+function partialEditorMessage(reasons: string[], lang: Language): string {
+  const labels: Record<string, { en: string; th: string }> = {
+    html: { en: "HTML", th: "HTML" },
+    heading: { en: "headings above level 3", th: "หัวข้อตั้งแต่ระดับ 4" },
+    list: { en: "numbered lists starting above 1", th: "รายการลำดับเลขที่เริ่มเกิน 1" },
+    linkReference: { en: "reference links", th: "ลิงก์อ้างอิง" },
+    definition: { en: "link definitions", th: "คำจำกัดความของลิงก์" },
+    footnoteDefinition: { en: "footnotes", th: "เชิงอรรถ" },
+    footnoteReference: { en: "footnotes", th: "เชิงอรรถ" },
+    imageReference: { en: "reference images", th: "รูปภาพแบบอ้างอิง" },
+    "gfm-alert": { en: "GitHub alert blocks", th: "กล่องแจ้งเตือน" },
+    "parse-error": { en: "unrecognized Markdown", th: "Markdown ที่ระบบอ่านไม่ครบ" },
+  };
+  const parts = [...new Set(reasons)].map(reason => labels[reason] || labels.advanced || { en: "special Markdown", th: "Markdown รูปแบบพิเศษ" });
+  const names = parts.map(part => part[lang]).join(lang === "th" ? " และ " : ", ");
+  return lang === "th"
+    ? `ส่วน ${names} แก้ได้ในช่อง Markdown`
+    : `${names} can be edited in its Markdown source block.`;
+}
+
 export default function AppHome() {
   const router = useRouter();
-  const [lang, setLangState] = useState<Language>("en");
-
-  // Load language from localStorage on mount
-  useEffect(() => {
-    const savedLang = localStorage.getItem("nota_lang") as Language;
-    if (savedLang === "en" || savedLang === "th") {
-      setLangState(savedLang);
-    }
-  }, []);
-
-  const setLang = (newLang: Language) => {
-    setLangState(newLang);
-    try {
-      localStorage.setItem("nota_lang", newLang);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const [lang, setLang] = useLanguagePreference();
 
   const t = I18N_MAIN[lang];
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  currentUserIdRef.current = user?.id ?? null;
   const [loading, setLoading] = useState(true);
 
   const [folders, setFolders] = useState<FolderItem[]>([]);
@@ -105,22 +113,74 @@ export default function AppHome() {
   const activeNoteIdRef = useRef<string | null>(null);
   const editorInstanceRef = useRef<MarkdownNoteEditorHandle | null>(null);
   const richEditorInstanceRef = useRef<RichNoteEditorHandle | null>(null);
+  const editorTabIdRef = useRef<string | null>(null);
+  const editorTabOwnerIdRef = useRef<string | null>(null);
+  const preserveDraftAfterLeaseLossRef = useRef<() => void>(() => {});
+  const createEditorTabId = () => typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function"
+    ? window.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const getEditorTabOwnerId = () => {
+    if (editorTabOwnerIdRef.current) return editorTabOwnerIdRef.current;
+    editorTabOwnerIdRef.current = createEditorTabId();
+    return editorTabOwnerIdRef.current;
+  };
+  const getEditorTabId = () => {
+    if (editorTabIdRef.current) return editorTabIdRef.current;
+    try {
+      editorTabIdRef.current = typeof window !== "undefined"
+        ? claimEditorTabId(window.sessionStorage, window.localStorage, createEditorTabId, getEditorTabOwnerId())
+        : createEditorTabId();
+    } catch {
+      editorTabIdRef.current = createEditorTabId();
+    }
+    return editorTabIdRef.current;
+  };
+  const getEditorTabOwnerIdRef = useRef(getEditorTabOwnerId);
+  getEditorTabOwnerIdRef.current = getEditorTabOwnerId;
+  const getEditorTabIdRef = useRef(getEditorTabId);
+  getEditorTabIdRef.current = getEditorTabId;
+  const createEditorTabIdRef = useRef(createEditorTabId);
+  createEditorTabIdRef.current = createEditorTabId;
+  useEffect(() => {
+    const ownerId = getEditorTabOwnerIdRef.current();
+    const tabId = getEditorTabIdRef.current();
+    const renewLease = () => {
+      try {
+        const currentTabId = editorTabIdRef.current ?? tabId;
+        if (refreshEditorTabLease(window.localStorage, currentTabId, ownerId)) return;
+        const replacementTabId = claimEditorTabId(window.sessionStorage, window.localStorage, createEditorTabIdRef.current, ownerId);
+        editorTabIdRef.current = replacementTabId;
+        if (replacementTabId !== currentTabId) preserveDraftAfterLeaseLossRef.current();
+      } catch { /* Editing remains available when browser storage is restricted. */ }
+    };
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
+      try { releaseEditorTabLease(window.localStorage, editorTabIdRef.current ?? tabId, ownerId); } catch { /* Stale leases expire. */ }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") renewLease();
+    };
+    renewLease();
+    const interval = window.setInterval(renewLease, 20_000);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", renewLease);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", renewLease);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      try { releaseEditorTabLease(window.localStorage, editorTabIdRef.current ?? tabId, ownerId); } catch { /* Stale leases expire. */ }
+    };
+  }, []);
   const draftTouchedRef = useRef(false);
   const draftVersionRef = useRef(0);
-  const markDraftTouched = () => {
-    draftTouchedRef.current = true;
-    draftVersionRef.current += 1;
-  };
-  const [isLoadingNote, setIsLoadingNote] = useState(false);
-  const selectActiveNote = (id: string | null) => {
-    activeNoteIdRef.current = id;
-    draftTouchedRef.current = false;
-    setActiveNoteId(id);
-    if (id && !noteWrites.getNote(id)) {
-      setIsLoadingNote(true);
-    }
-  };
-  const [activeNote, setActiveNote] = useState<any | null>(null);
+  const [activeNote, setActiveNote] = useState<EditableNote | null>(null);
+  const [richEditorAlignmentFailureNoteId, setRichEditorAlignmentFailureNoteId] = useState<string | null>(null);
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>("saved");
+  const [draftConflict, setDraftConflict] = useState<DraftConflict | null>(null);
+  const localCreateRequestsRef = useRef(new Map<string, Promise<EditableNote>>());
+  const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
   const [noteWrites] = useState(() => new NoteWriteCoordinator(async (id, patch, revision) => {
     const response = await fetch(`/api/notes/${id}`, {
       method: "PATCH",
@@ -128,101 +188,350 @@ export default function AppHome() {
       body: JSON.stringify({ ...patch, revision }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.note) throw new Error(data.error || `Failed to update note (${response.status})`);
+    if (!response.ok || !data.note) {
+      const error = new Error(data.error || `Failed to update note (${response.status})`) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
+    }
     return data.note as EditableNote;
   }, (saved) => {
-    setNotes((previous) => previous.map((note) => note.id === saved.id ? {
-      ...note, title: saved.title, folderId: saved.folderId, revision: saved.revision,
-      color: parseNoteTheme(saved.content).color,
-    } : note));
-    setActiveNote((previous: EditableNote | null) => previous?.id === saved.id ? saved : previous);
+    setNotes((previous) => {
+      const exists = previous.some((note) => note.id === saved.id);
+      const updated = previous.map((note) => note.id === saved.id ? {
+        ...note, title: saved.title, folderId: saved.folderId, revision: saved.revision,
+        updatedAt: String(saved.updatedAt || new Date().toISOString()),
+        color: parseNoteTheme(saved.content).color,
+      } : note);
+      return (exists ? updated : [{
+        id: saved.id,
+        title: saved.title,
+        folderId: saved.folderId,
+        updatedAt: String(saved.updatedAt || new Date().toISOString()),
+        revision: saved.revision,
+        color: parseNoteTheme(saved.content).color,
+      }, ...updated]).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    });
+    setActiveNote((previous) => previous?.id === saved.id ? saved : previous);
     setOperationError((previous) => previous?.noteId === saved.id ? null : previous);
-  }, (id, error) => setOperationError({ noteId: id, message: error.message })));
+  }, (id, error) => {
+    if (activeNoteIdRef.current === id) setAutosaveState("error");
+    const status = (error as Error & { status?: number }).status;
+    if (status === 409) {
+      fetch(`/api/notes/${id}`)
+        .then((response) => response.ok ? response.json() : null)
+        .then((data) => {
+          if (data?.note && activeNoteIdRef.current === id) {
+            let localDrafts: NoteDraftRecord[] = [];
+            const currentUserId = currentUserIdRef.current;
+            if (currentUserId) {
+              try {
+                localDrafts = listNoteDrafts(window.localStorage, currentUserId)
+                  .filter((draft) => draft.noteId === id && (draft.title !== data.note.title || draft.content !== data.note.content));
+              } catch { /* Keep the active editor copy available if storage is restricted. */ }
+            }
+            const ownerId = editorTabOwnerIdRef.current;
+            const currentDraft = ownerId
+              ? selectNoteDraftForEditor(localDrafts, ownerId, editorTabIdRef.current ?? "")
+              : localDrafts[0] ?? null;
+            setDraftConflict({
+              remote: data.note as EditableNote,
+              draft: currentDraft ?? undefined,
+              localDrafts: localDrafts.length ? localDrafts : undefined,
+            });
+          }
+        })
+        .catch(() => undefined);
+    }
+  }));
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [isLoadingNote, setIsLoadingNote] = useState(false);
+  const selectActiveNote = (id: string | null) => {
+    activeNoteIdRef.current = id;
+    setRichEditorAlignmentFailureNoteId(null);
+    draftTouchedRef.current = false;
+    draftVersionRef.current = 0;
+    setDraftConflict(null);
+    setAutosaveState("saved");
+    setActiveNoteId(id);
+    if (id && !id.startsWith("local:") && !noteWrites.getNote(id)) {
+      setIsLoadingNote(true);
+    }
+  };
+  const markDraftTouched = () => {
+    draftTouchedRef.current = true;
+    draftVersionRef.current += 1;
+    setAutosaveState("saving");
+  };
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
 
   // Editor mode state
-  const [isEditing, setIsEditing] = useState(false);
   const [activeEditorMode, setActiveEditorMode] = useState<EditorMode>("visual");
+  const initializedEditorModeForRef = useRef<string | null>(null);
   const [richEditorDirty, setRichEditorDirty] = useState(false);
   const [focusEditorOnOpen, setFocusEditorOnOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const [operationError, setOperationError] = useState<{ noteId: string | null; message: string } | null>(null);
+  const editTitleRef = useRef("");
+  const editContentRef = useRef("");
+  const updateEditTitle = (title: string) => {
+    markDraftTouched();
+    editTitleRef.current = title;
+    setEditTitle(title);
+  };
+  const updateEditContent = (content: string) => {
+    markDraftTouched();
+    setRichEditorAlignmentFailureNoteId(null);
+    editContentRef.current = content;
+    setEditContent(content);
+  };
   const editorCompatibility = useMemo(
-    () => getRichEditorCompatibility(isEditing ? editContent : activeNote?.content || ""),
-    [isEditing, editContent, activeNote?.content],
+    () => getRichEditorCompatibility(editContent),
+    [editContent],
   );
-  const isDraftDirty = Boolean(isEditing && activeNote && (
+  const richEditorAlignmentFailed = activeNote?.id === richEditorAlignmentFailureNoteId;
+  const isDraftDirty = Boolean(activeNote && (
     richEditorDirty || isNoteDraftDirty(activeNote, { title: editTitle, content: editContent })
   ));
 
   const rememberEditorMode = (mode: EditorMode) => {
-    try { localStorage.setItem(EDITOR_MODE_STORAGE_KEY, mode); } catch { /* Preference remains active for this session. */ }
+    try { recordEditorModeChoice(window.localStorage, mode); } catch { /* Preference remains active for this session. */ }
   };
 
   const getLatestDraftContent = () => getLatestNoteDraftContent(
     activeEditorMode,
-    editContent,
+    editContentRef.current,
     richEditorInstanceRef.current,
   );
 
-  const confirmDiscardDraft = () => {
-    const latestContent = isEditing ? getLatestDraftContent() : editContent;
-    const dirty = Boolean(isEditing && activeNote && isNoteDraftDirty(activeNote, { title: editTitle, content: latestContent }));
-    return !dirty || window.confirm(
-      lang === "th" ? "มีการแก้ไขที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขหรือไม่?" : "Discard unsaved changes?",
-    );
+  const storeDraftSnapshot = (target: EditableNote, title: string, content: string): NoteDraftRecord | null => {
+    if (!user || typeof window === "undefined") return null;
+    if (!isNoteDraftDirty(target, { title, content })) {
+      try { discardNoteDraft(window.localStorage, user.id, target.id, getEditorTabOwnerId()); } catch { /* Storage may be unavailable. */ }
+      return null;
+    }
+    const draft: NoteDraftRecord = {
+      userId: user.id,
+      noteId: target.id,
+      title,
+      content,
+      baseRevision: target.revision,
+      baseTitle: target.title,
+      baseContent: target.content,
+      folderId: target.folderId,
+      tabId: getEditorTabOwnerId(),
+      editorTabId: getEditorTabId(),
+      updatedAt: new Date().toISOString(),
+    };
+    try { saveNoteDraft(window.localStorage, draft); } catch { /* Keep editing; the server save may still work. */ }
+    return draft;
   };
 
-  const beginEditing = (content = activeNote?.content || "") => {
-    const compatibility = getRichEditorCompatibility(content);
-    setActiveEditorMode(compatibility.supported ? readPreferredEditorMode() : "markdown");
-    setRichEditorDirty(false);
-    setFocusEditorOnOpen(false);
-    setIsEditing(true);
+  const stashCurrentDraft = () => {
+    if (!activeNote || !activeNoteId) return;
+    const content = getLatestDraftContent();
+    editContentRef.current = content;
+    storeDraftSnapshot(activeNote, editTitleRef.current, content);
   };
+  preserveDraftAfterLeaseLossRef.current = stashCurrentDraft;
+
+  const applyCreatedNote = (temporaryId: string, saved: EditableNote, capturedVersion: number) => {
+    if (!user || typeof window === "undefined") return;
+    noteWrites.observeNote(saved);
+    const currentlyEditingThisNote = activeNoteIdRef.current === temporaryId;
+    const currentTitle = currentlyEditingThisNote ? editTitleRef.current : undefined;
+    const currentContent = currentlyEditingThisNote ? getLatestDraftContent() : undefined;
+    const recovered = readNoteDraft(window.localStorage, user.id, temporaryId, getEditorTabOwnerId());
+    const title = (currentTitle ?? recovered?.title ?? saved.title).trim()
+      ? currentTitle ?? recovered?.title ?? saved.title
+      : saved.title;
+    const content = currentContent ?? recovered?.content ?? saved.content;
+
+    try {
+      discardNoteDraft(window.localStorage, user.id, temporaryId, getEditorTabOwnerId());
+      if (isNoteDraftDirty(saved, { title, content })) {
+        saveNoteDraft(window.localStorage, {
+          userId: user.id,
+          noteId: saved.id,
+          title,
+          content,
+          baseRevision: saved.revision,
+          baseTitle: saved.title,
+          baseContent: saved.content,
+          folderId: saved.folderId,
+          tabId: getEditorTabOwnerId(),
+          editorTabId: getEditorTabId(),
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        discardNoteDraft(window.localStorage, user.id, saved.id, getEditorTabOwnerId());
+      }
+    } catch { /* Retain the in-memory copy if browser storage is unavailable. */ }
+
+    setNotes((previous) => previous.some((note) => note.id === saved.id) ? previous : [{
+      id: saved.id,
+      title: saved.title,
+      folderId: saved.folderId,
+      updatedAt: String(saved.updatedAt || new Date().toISOString()),
+      revision: saved.revision,
+      color: parseNoteTheme(saved.content).color,
+    }, ...previous]);
+
+    if (currentlyEditingThisNote) {
+      activeNoteIdRef.current = saved.id;
+      setActiveNoteId(saved.id);
+      setActiveNote(saved);
+      setFocusEditorOnOpen(false);
+      if (!editTitleRef.current.trim()) {
+        editTitleRef.current = saved.title;
+        setEditTitle(saved.title);
+      }
+      if (draftVersionRef.current === capturedVersion) {
+        editTitleRef.current = saved.title;
+        editContentRef.current = saved.content;
+        setEditTitle(saved.title);
+        setEditContent(saved.content);
+        draftTouchedRef.current = false;
+        setRichEditorDirty(false);
+        setAutosaveState("saved");
+        try { discardNoteDraft(window.localStorage, user.id, saved.id, getEditorTabOwnerId()); } catch { /* Storage may be unavailable. */ }
+      } else {
+        editContentRef.current = content;
+        setEditContent(content);
+        setAutosaveState("saving");
+      }
+    }
+    void loadNotes();
+  };
+
+  async function persistDraftFor(target: EditableNote, title: string, content: string, version: number): Promise<void> {
+    if (!user) return;
+    storeDraftSnapshot(target, title, content);
+    if (!isNoteDraftDirty(target, { title, content })) {
+      if (activeNoteIdRef.current === target.id) setAutosaveState("saved");
+      return;
+    }
+
+    if (target.id.startsWith("local:")) {
+      const pending = localCreateRequestsRef.current.get(target.id);
+      if (pending) {
+        const saved = await pending;
+        await persistDraftFor(saved, title, content, version);
+        return;
+      }
+      const responsePromise = (async () => {
+        const response = await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || t.noteTitlePlaceholder,
+            content,
+            folderId: target.folderId,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.note) throw new Error(data.error || `Failed to create note (${response.status})`);
+        return data.note as EditableNote;
+      })();
+      localCreateRequestsRef.current.set(target.id, responsePromise);
+      try {
+        const saved = await responsePromise;
+        applyCreatedNote(target.id, saved, version);
+      } finally {
+        if (localCreateRequestsRef.current.get(target.id) === responsePromise) {
+          localCreateRequestsRef.current.delete(target.id);
+        }
+      }
+      return;
+    }
+
+    const titleToSave = title.trim() || target.title || t.noteTitlePlaceholder;
+    const saved = await noteWrites.write(target.id, { title: titleToSave, content });
+    if (user && typeof window !== "undefined") {
+      const currentDraft = readNoteDraft(window.localStorage, user.id, target.id, getEditorTabOwnerId());
+      if (currentDraft?.title === title && currentDraft.content === content) {
+        discardNoteDraft(window.localStorage, user.id, target.id, getEditorTabOwnerId());
+      }
+    }
+    if (activeNoteIdRef.current === target.id && draftVersionRef.current === version) {
+      editTitleRef.current = saved.title;
+      editContentRef.current = saved.content;
+      setEditTitle(saved.title);
+      setEditContent(saved.content);
+      draftTouchedRef.current = false;
+      setRichEditorDirty(false);
+      setAutosaveState("saved");
+    } else if (activeNoteIdRef.current === target.id && !editTitleRef.current.trim()) {
+      editTitleRef.current = saved.title;
+      setEditTitle(saved.title);
+    }
+    void loadNotes();
+  }
+
+  const saveActiveDraft = async () => {
+    if (!activeNote || !activeNoteId || draftConflict) return;
+    const content = getLatestDraftContent();
+    editContentRef.current = content;
+    const title = editTitleRef.current;
+    const version = draftVersionRef.current;
+    setAutosaveState(isNoteDraftDirty(activeNote, { title, content }) ? "saving" : "saved");
+    try {
+      await persistDraftFor(activeNote, title, content, version);
+    } catch (error) {
+      console.error("Failed to save note", error);
+      if (activeNoteIdRef.current === activeNote.id) setAutosaveState("error");
+    }
+  };
+
+  const stashDraftRef = useRef(stashCurrentDraft);
+  stashDraftRef.current = stashCurrentDraft;
+  const saveDraftRef = useRef(saveActiveDraft);
+  saveDraftRef.current = saveActiveDraft;
+
+  useEffect(() => {
+    const retrySaveWhenOnline = () => {
+      if (navigator.onLine) void saveDraftRef.current();
+    };
+    window.addEventListener("online", retrySaveWhenOnline);
+    return () => window.removeEventListener("online", retrySaveWhenOnline);
+  }, []);
+
+  useEffect(() => {
+    if (!isDraftDirty || !activeNote || !activeNoteId) return;
+    const timer = setTimeout(() => stashDraftRef.current(), 250);
+    return () => clearTimeout(timer);
+  }, [isDraftDirty, activeNote, activeNoteId, editTitle, editContent, richEditorDirty]);
+
+  useEffect(() => {
+    if (!isDraftDirty || !activeNote || !activeNoteId || draftConflict) return;
+    const timer = setTimeout(() => { void saveDraftRef.current(); }, 700);
+    return () => clearTimeout(timer);
+  }, [isDraftDirty, activeNote, activeNoteId, editTitle, editContent, richEditorDirty, draftConflict]);
+
+  useEffect(() => {
+    if (!isDraftDirty || !activeNote || !activeNoteId) return;
+    const handlePageHide = () => stashDraftRef.current();
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [isDraftDirty, activeNote, activeNoteId, editTitle, editContent]);
 
   const handleEditorModeChange = (mode: EditorMode) => {
     if (mode === "visual" && !getRichEditorCompatibility(editContent).supported) return;
+    if (mode === "visual") setRichEditorAlignmentFailureNoteId(null);
     const latestContent = getLatestDraftContent();
+    editContentRef.current = latestContent;
     setEditContent(latestContent);
     setActiveEditorMode(mode);
     rememberEditorMode(mode);
     setRichEditorDirty(false);
   };
 
-  const cancelEditing = () => {
-    if (!confirmDiscardDraft()) return;
-    draftTouchedRef.current = false;
-    setRichEditorDirty(false);
-    setFocusEditorOnOpen(false);
-    if (activeNote) {
-      setEditTitle(activeNote.title);
-      setEditContent(activeNote.content);
-    }
-    setIsEditing(false);
-  };
-
-  useEffect(() => {
-    if (!isDraftDirty) return;
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = true;
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [isDraftDirty]);
-
   // Share state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isShared, setIsShared] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const [shareError, setShareError] = useState("");
 
   // Upload Modal
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -233,10 +542,14 @@ export default function AppHome() {
   // Mobile Drawer State
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Chart Wizard & Color Picker state
+  // Chart Wizard state
   const [isChartWizardOpen, setIsChartWizardOpen] = useState(false);
-  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
-  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [chartWizardInstanceKey, setChartWizardInstanceKey] = useState(0);
+
+  const openChartWizard = () => {
+    setChartWizardInstanceKey((key) => key + 1);
+    setIsChartWizardOpen(true);
+  };
 
   // Keyboard shortcuts state
   const [shortcuts, setShortcuts] = useState(() => getShortcuts());
@@ -256,6 +569,32 @@ export default function AppHome() {
       })
       .then((data) => {
         setUser(data.user);
+        try {
+          const localDrafts = listNoteDrafts(window.localStorage, data.user.id)
+            .filter((draft) => draft.noteId.startsWith("local:") && (draft.title.trim() || draft.content.trim()));
+          const recovered = selectNoteDraftForEditor(localDrafts, getEditorTabOwnerIdRef.current(), getEditorTabIdRef.current());
+          if (recovered) {
+            const note: EditableNote = {
+              id: recovered.noteId,
+              title: recovered.baseTitle,
+              content: recovered.baseContent,
+              folderId: recovered.folderId ?? null,
+              revision: recovered.baseRevision,
+            };
+            activeNoteIdRef.current = note.id;
+            draftVersionRef.current = 1;
+            draftTouchedRef.current = true;
+            setActiveNoteId(note.id);
+            setActiveNote(note);
+            initializedEditorModeForRef.current = note.id;
+            editTitleRef.current = recovered.title;
+            editContentRef.current = recovered.content;
+            setEditTitle(recovered.title);
+            setEditContent(recovered.content);
+            setActiveEditorMode(readPreferredEditorMode());
+            setAutosaveState("saving");
+          }
+        } catch { /* Browsers can disable local storage; continue with server data. */ }
         Promise.all([loadFolders(), loadNotes()]);
       })
       .catch(() => {
@@ -270,10 +609,15 @@ export default function AppHome() {
   const loadFolders = async () => {
     try {
       const res = await fetch("/api/folders");
+      if (!res.ok) throw new Error("load-folders");
       const data = await res.json();
-      if (data.folders) setFolders(data.folders);
+      if (data.folders) {
+        setFolders(data.folders);
+        setOperationError(previous => previous?.message === t.loadFoldersError ? null : previous);
+      }
     } catch (err) {
       console.error(err);
+      setOperationError({ noteId: null, message: t.loadFoldersError });
     }
   };
 
@@ -296,6 +640,7 @@ export default function AppHome() {
       if (!res.ok) throw new Error(`Failed to load notes (${res.status})`);
       const data = await res.json();
       if (requestId !== notesRequestIdRef.current) return;
+      setOperationError(previous => previous?.message === t.loadNotesError ? null : previous);
       if (Array.isArray(data.notes)) {
         rememberNoteRevisions(data.notes);
         setNotes((previous) => (append ? [...previous, ...data.notes] : data.notes));
@@ -316,6 +661,9 @@ export default function AppHome() {
       }
     } catch (err) {
       console.error(err);
+      if (requestId === notesRequestIdRef.current) {
+        setOperationError({ noteId: null, message: t.loadNotesError });
+      }
     } finally {
       if (append && requestId === notesRequestIdRef.current) setIsLoadingMoreNotes(false);
     }
@@ -358,11 +706,77 @@ export default function AppHome() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const applyLoadedNote = (note: EditableNote & { isShared?: boolean }) => {
+    setActiveNote(note);
+    setFocusEditorOnOpen(false);
+    setIsShared(Boolean(note.isShared));
+    if (initializedEditorModeForRef.current !== note.id) {
+      const compatible = getRichEditorCompatibility(note.content);
+      setActiveEditorMode(compatible.supported ? readPreferredEditorMode() : "markdown");
+      initializedEditorModeForRef.current = note.id;
+    }
+    if (!user) {
+      editTitleRef.current = note.title;
+      editContentRef.current = note.content;
+      setEditTitle(note.title);
+      setEditContent(note.content);
+      setAutosaveState("saved");
+      return;
+    }
+    let draft: NoteDraftRecord | null = null;
+    let draftsForNote: NoteDraftRecord[] = [];
+    const editorOwnerId = getEditorTabOwnerId();
+    const editorSessionTabId = getEditorTabId();
+    try {
+      draftsForNote = listNoteDrafts(window.localStorage, user.id).filter((item) => item.noteId === note.id);
+      draft = selectNoteDraftForEditor(draftsForNote, editorOwnerId, editorSessionTabId)
+        || readNoteDraft(window.localStorage, user.id, note.id);
+    } catch { /* Continue without local recovery. */ }
+    if (draft && (draft.title !== note.title || draft.content !== note.content)) {
+      editTitleRef.current = draft.title;
+      editContentRef.current = draft.content;
+      setEditTitle(draft.title);
+      setEditContent(draft.content);
+      draftTouchedRef.current = true;
+      draftVersionRef.current += 1;
+      const sameBase = draft.baseRevision === note.revision
+        && draft.baseTitle === note.title
+        && draft.baseContent === note.content;
+      let ownsEditorTabLease = false;
+      try { ownsEditorTabLease = refreshEditorTabLease(window.localStorage, editorSessionTabId, editorOwnerId); } catch { /* Local recovery can still show a conflict choice. */ }
+      const matchingEditorTabDraftCount = draftsForNote.filter((item) => {
+        const storedEditorTabId = item.editorTabId ?? (item.tabId === editorOwnerId ? undefined : item.tabId);
+        return storedEditorTabId === editorSessionTabId;
+      }).length;
+      const fromOtherTab = !isNoteDraftFromCurrentEditor(draft, editorOwnerId, editorSessionTabId, ownsEditorTabLease, matchingEditorTabDraftCount);
+      const localDrafts = fromOtherTab
+        ? draftsForNote.filter((item) => item.title !== note.title || item.content !== note.content)
+        : undefined;
+      setDraftConflict(sameBase && !fromOtherTab ? null : { remote: note, draft, localDrafts });
+      setAutosaveState(sameBase && !fromOtherTab ? "saving" : "error");
+    } else {
+      if (draft) {
+        try { discardNoteDraft(window.localStorage, user.id, note.id, draft?.tabId); } catch { /* Storage may be unavailable. */ }
+      }
+      editTitleRef.current = note.title;
+      editContentRef.current = note.content;
+      setEditTitle(note.title);
+      setEditContent(note.content);
+      draftTouchedRef.current = false;
+      draftVersionRef.current = 0;
+      setDraftConflict(null);
+      setAutosaveState("saved");
+    }
+  };
+
   // Fetch single active note details (Instant SWR cache + background revalidation)
   useEffect(() => {
-    setIsEditingTitle(false);
     if (!activeNoteId) {
       setActiveNote(null);
+      setIsLoadingNote(false);
+      return;
+    }
+    if (activeNoteId.startsWith("local:")) {
       setIsLoadingNote(false);
       return;
     }
@@ -370,12 +784,7 @@ export default function AppHome() {
     // 1. Instant Cache Hit (0ms transition)
     const cached = noteWrites.getNote(activeNoteId);
     if (cached) {
-      setActiveNote(cached);
-      if (!draftTouchedRef.current) {
-        setEditTitle(cached.title);
-        setEditContent(cached.content);
-      }
-      setIsShared(Boolean((cached as any).isShared));
+      applyLoadedNote(cached);
       setIsLoadingNote(false);
     } else {
       setIsLoadingNote(true);
@@ -387,105 +796,81 @@ export default function AppHome() {
       .then((res) => { if (!res.ok) throw new Error("Failed to load note"); return res.json(); })
       .then((data) => {
         if (!cancelled && data.note && noteWrites.observeNote(data.note)) {
-          setActiveNote(data.note);
-          if (!draftTouchedRef.current) {
-            setEditTitle(data.note.title);
-            setEditContent(data.note.content);
-          }
-          setIsShared(Boolean(data.note.isShared));
+          applyLoadedNote(data.note);
           setIsLoadingNote(false);
         }
       })
       .catch((err) => {
         console.error("Failed to load note", err);
-        if (!cancelled) setIsLoadingNote(false);
+        if (!cancelled) {
+          setIsLoadingNote(false);
+          setOperationError({ noteId: activeNoteId, message: t.loadNoteError });
+        }
       });
     return () => { cancelled = true; };
-  }, [activeNoteId, noteWrites]);
+  }, [activeNoteId, noteWrites, user, t.loadNoteError]);
 
   // Handle Toggle Share
   const handleToggleShare = async (newSharedStatus: boolean) => {
     if (!activeNoteId) return;
+    setShareError("");
     try {
       const res = await fetch(`/api/notes/${activeNoteId}/share`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isShared: newSharedStatus }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setIsShared(newSharedStatus);
-        setActiveNote((prev: any) => ({ ...prev, isShared: newSharedStatus, shareToken: data.note.shareToken }));
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.note) throw new Error("share-update");
+      setIsShared(newSharedStatus);
+      setActiveNote((prev: any) => ({ ...prev, isShared: newSharedStatus, shareToken: data.note.shareToken }));
     } catch (err) {
       console.error(err);
+      setShareError(t.shareError);
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (typeof window === "undefined" || !activeNoteId) return;
     if (!activeNote?.shareToken) return;
     const shareUrl = `${window.location.origin}/share/${activeNote.shareToken}`;
-    navigator.clipboard.writeText(shareUrl);
-    setCopiedShareLink(true);
-    setTimeout(() => setCopiedShareLink(false), 2000);
+    setShareError("");
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShareLink(true);
+      setTimeout(() => setCopiedShareLink(false), 2000);
+    } catch {
+      setShareError(t.copyLinkError);
+    }
   };
 
   // Handle Create Note
   const handleCreateNote = async (folderId?: string | null) => {
-    if (!confirmDiscardDraft()) return;
-    try {
-      const res = await fetch("/api/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "โน้ตใหม่ไม่มีชื่อ",
-          content: "",
-          folderId: folderId || null,
-        }),
-      });
-      const data = await res.json();
-      if (data.note) {
-        noteWrites.observeNote(data.note);
-        await loadNotes();
-        setEditTitle(data.note.title);
-        setEditContent(data.note.content);
-        selectActiveNote(data.note.id);
-        setActiveEditorMode(readPreferredEditorMode());
-        setRichEditorDirty(false);
-        setFocusEditorOnOpen(true);
-        setIsEditing(true);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    stashCurrentDraft();
+    void saveActiveDraft();
+    const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const note: EditableNote = {
+      id: `local:${randomId}`,
+      title: "",
+      content: "",
+      folderId: folderId ?? selectedFolderId,
+      revision: -1,
+    };
+    selectActiveNote(note.id);
+    setActiveNote(note);
+    editTitleRef.current = "";
+    editContentRef.current = "";
+    setEditTitle("");
+    setEditContent("");
+    setActiveEditorMode(readPreferredEditorMode());
+    setRichEditorDirty(false);
+    setFocusEditorOnOpen(true);
+    initializedEditorModeForRef.current = note.id;
   };
 
-  // Handle Save Note
-  const handleSaveNote = async () => {
-    if (!activeNoteId || isSaving) return;
-    const targetId = activeNoteId;
-    const latestContent = getLatestDraftContent();
-    const savedVersion = draftVersionRef.current;
-    setIsSaving(true);
-    try {
-      await patchNote(targetId, {
-        title: editTitle,
-        content: latestContent,
-      });
-      if (activeNoteIdRef.current === targetId && draftVersionRef.current === savedVersion) {
-        draftTouchedRef.current = false;
-        setRichEditorDirty(false);
-        setFocusEditorOnOpen(false);
-        setIsEditing(false);
-      }
-      await loadNotes();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const handleSaveNote = saveActiveDraft;
 
   // Global Keyboard shortcuts with custom mappings
   useEffect(() => {
@@ -524,13 +909,12 @@ export default function AppHome() {
       // 4. Toggle Edit/View
       if (matchesShortcut(e, shortcuts.toggleEdit) && activeNote && !isInputFocused) {
         e.preventDefault();
-        if (isEditing) cancelEditing();
-        else beginEditing();
+        handleEditorModeChange(activeEditorMode === "visual" ? "markdown" : "visual");
         return;
       }
 
       // 5. Save Note
-      if (matchesShortcut(e, shortcuts.saveNote) && isEditing) {
+      if (matchesShortcut(e, shortcuts.saveNote) && activeNote) {
         e.preventDefault();
         handleSaveNote();
         return;
@@ -539,19 +923,18 @@ export default function AppHome() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shortcuts, selectedFolderId, activeNote, isEditing, editTitle, editContent]);
+  }, [shortcuts, selectedFolderId, activeNote, activeEditorMode, editTitle, editContent, editorCompatibility.supported]);
 
   // Handle Delete Note
   const handleDeleteNote = async (id: string) => {
-    if (id === activeNoteId && !confirmDiscardDraft()) return;
     try {
       const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "ลบโน้ตไม่สำเร็จ");
-      }
+      if (!res.ok) throw new Error("delete-note");
       noteWrites.evictNote(id);
       prefetchedIdsRef.current.delete(id);
+      if (user && typeof window !== "undefined") {
+        try { discardNoteDrafts(window.localStorage, user.id, id); } catch { /* Storage may be unavailable. */ }
+      }
       if (activeNoteId === id) {
         selectActiveNote(null);
         setActiveNote(null);
@@ -559,88 +942,45 @@ export default function AppHome() {
       await loadNotes();
     } catch (err: any) {
       console.error(err);
-      setOperationError({ noteId: id, message: err.message || "ลบโน้ตไม่สำเร็จ" });
-    }
-  };
-
-  // Handle note theme color change
-  const handleSelectTheme = async (newColor: NoteColorKey) => {
-    if (!activeNoteId || !activeNote) return;
-    setIsColorPickerOpen(false);
-    if (isEditing) {
-      markDraftTouched();
-      const latestContent = getLatestDraftContent();
-      setEditContent(applyNoteTheme(latestContent, newColor));
-      return;
-    }
-    try {
-      const targetId = activeNoteId;
-      const saved = await patchNote(targetId, (current) => ({ content: applyNoteTheme(current.content, newColor) }));
-      if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
-    } catch (err) {
-      console.error("Failed to update note theme", err);
+      setOperationError({ noteId: id, message: t.deleteNoteError });
     }
   };
 
   // Handle voice transcript insertion
   const handleVoiceTranscript = async (text: string) => {
     if (!activeNoteId || !activeNote) return;
-    if (isEditing) {
-      markDraftTouched();
-      if (activeEditorMode === "visual" && richEditorInstanceRef.current) {
-        richEditorInstanceRef.current.insertText(text);
-      } else {
-        setEditContent((prev) => (prev ? `${prev}\n${text}` : text));
-      }
+    if (activeEditorMode === "visual" && richEditorInstanceRef.current) {
+      richEditorInstanceRef.current.insertText(text);
     } else {
-      try {
-        const targetId = activeNoteId;
-        const saved = await patchNote(targetId, (current) => ({ content: current.content ? `${current.content}\n\n${text}` : text }));
-        if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
-      } catch (err) {
-        console.error("Failed to append voice transcript", err);
-      }
+      updateEditContent(editContentRef.current ? `${editContentRef.current}\n${text}` : text);
     }
   };
 
   // Handle chart insertion from wizard
   const handleInsertChart = async (markdown: string) => {
     if (!activeNoteId || !activeNote) return;
-    setIsInsertMenuOpen(false);
-    if (isEditing) {
-      markDraftTouched();
-      if (activeEditorMode === "visual") {
-        const latestContent = getLatestDraftContent();
-        setEditContent(appendMarkdownBlock(latestContent, markdown));
-        setRichEditorDirty(false);
-        setActiveEditorMode("markdown");
-      } else if (editorInstanceRef.current?.insertMarkdown) {
-        editorInstanceRef.current.insertMarkdown(markdown);
-      } else {
-        setEditContent((prev) => appendMarkdownBlock(prev, markdown));
-      }
+    if (activeEditorMode === "visual") {
+      richEditorInstanceRef.current?.insertMarkdown(markdown);
+    } else if (editorInstanceRef.current?.insertMarkdown) {
+      editorInstanceRef.current.insertMarkdown(markdown);
     } else {
-      try {
-        const targetId = activeNoteId;
-        const saved = await patchNote(targetId, (current) => ({ content: appendMarkdownBlock(current.content, markdown) }));
-        if (activeNoteIdRef.current === targetId) setEditContent(saved.content);
-      } catch (err) {
-        console.error("Failed to insert chart", err);
-      }
+      updateEditContent(appendMarkdownBlock(editContentRef.current, markdown));
     }
   };
 
   // Handle Create Folder
   const handleCreateFolder = async (name: string, parentId?: string | null) => {
     try {
-      await fetch("/api/folders", {
+      const response = await fetch("/api/folders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, parentId }),
       });
+      if (!response.ok) throw new Error("create-folder");
       loadFolders();
     } catch (err) {
       console.error(err);
+      setOperationError({ noteId: null, message: t.createFolderError });
     }
   };
 
@@ -649,8 +989,8 @@ export default function AppHome() {
     try {
       const response = await fetch(`/api/folders/${id}`, { method: "DELETE" });
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Could not delete folder (${response.status})`);
+        setOperationError({ noteId: null, message: response.status === 409 ? t.folderNotEmptyError : t.deleteFolderError });
+        return;
       }
       setOperationError((previous) => previous?.noteId === null ? null : previous);
       if (selectedFolderId === id) setSelectedFolderId(null);
@@ -658,7 +998,7 @@ export default function AppHome() {
       loadNotes();
     } catch (err) {
       console.error(err);
-      setOperationError({ noteId: null, message: err instanceof Error ? err.message : "ลบโฟลเดอร์ไม่สำเร็จ" });
+      setOperationError({ noteId: null, message: t.deleteFolderError });
     }
   };
 
@@ -667,22 +1007,15 @@ export default function AppHome() {
     if (!newTitle.trim()) return;
     try {
       await patchNote(id, { title: newTitle.trim() });
-      if (activeNoteIdRef.current === id) setEditTitle(newTitle.trim());
+      if (activeNoteIdRef.current === id) {
+        editTitleRef.current = newTitle.trim();
+        setEditTitle(newTitle.trim());
+      }
       await loadNotes();
     } catch (err) {
       console.error("Failed to rename note:", err);
+      setOperationError({ noteId: id, message: t.renameNoteError });
     }
-  };
-
-  const handleRenameActiveNote = async (newTitle: string) => {
-    setIsEditingTitle(false);
-    if (!activeNote) return;
-    const trimmed = newTitle.trim();
-    if (!trimmed || trimmed === activeNote.title) {
-      setEditTitle(activeNote.title);
-      return;
-    }
-    await handleRenameNote(activeNote.id, trimmed);
   };
 
   // Handle Rename Folder
@@ -693,14 +1026,16 @@ export default function AppHome() {
       prev.map((f) => (f.id === id ? { ...f, name: newName.trim() } : f))
     );
     try {
-      await fetch(`/api/folders/${id}`, {
+      const response = await fetch(`/api/folders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName.trim() }),
       });
+      if (!response.ok) throw new Error("rename-folder");
       loadFolders();
     } catch (err) {
       console.error("Failed to rename folder:", err);
+      setOperationError({ noteId: null, message: t.renameFolderError });
       loadFolders();
     }
   };
@@ -712,9 +1047,10 @@ export default function AppHome() {
       await loadNotes();
     } catch (err) {
       console.error("Failed to move note:", err);
+      const status = (err as Error & { status?: number }).status;
       setOperationError({
         noteId,
-        message: lang === "th" ? "ไม่สามารถย้ายโน้ตได้" : "Failed to move note",
+        message: status === 404 ? t.itemNotFoundError : status === 409 ? t.noteChangedError : t.moveNoteError,
       });
     }
   };
@@ -722,6 +1058,7 @@ export default function AppHome() {
   // Handle Move Folder
   const handleMoveFolder = async (folderId: string, targetParentId: string | null) => {
     const originalFolders = [...folders];
+    let failureMessage = t.moveFolderError;
     // Optimistic UI update
     setFolders((prev) =>
       prev.map((f) => (f.id === folderId ? { ...f, parentId: targetParentId } : f))
@@ -733,6 +1070,8 @@ export default function AppHome() {
         body: JSON.stringify({ parentId: targetParentId }),
       });
       if (!res.ok) {
+        if (res.status === 400) failureMessage = t.folderMoveInvalidError;
+        else if (res.status === 404) failureMessage = t.itemNotFoundError;
         throw new Error("Failed to move folder");
       }
       loadFolders();
@@ -741,7 +1080,7 @@ export default function AppHome() {
       setFolders(originalFolders);
       setOperationError({
         noteId: null,
-        message: lang === "th" ? "ไม่สามารถย้ายโฟลเดอร์ได้" : "Failed to move folder",
+        message: failureMessage,
       });
       loadFolders();
     }
@@ -749,24 +1088,81 @@ export default function AppHome() {
 
   // Handle Logout
   const handleLogout = async () => {
-    if (!confirmDiscardDraft()) return;
+    stashCurrentDraft();
+    void saveActiveDraft();
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   };
 
-  const { color: activeColorKey } = parseNoteTheme(isEditing ? editContent : activeNote?.content || "");
-  const activeTheme = NOTE_THEMES[activeColorKey] || NOTE_THEMES.default;
+  const selectLocalConflictDraft = (draft: NoteDraftRecord) => {
+    if (!draftConflict) return;
+    setDraftConflict({ ...draftConflict, draft });
+    editTitleRef.current = draft.title;
+    editContentRef.current = draft.content;
+    setEditTitle(draft.title);
+    setEditContent(draft.content);
+    draftTouchedRef.current = true;
+    draftVersionRef.current += 1;
+    setRichEditorDirty(false);
+    setAutosaveState("error");
+  };
+
+  const keepMineAfterConflict = async () => {
+    if (!draftConflict || !activeNoteId) return;
+    const remote = draftConflict.remote;
+    noteWrites.observeNote(remote);
+    setActiveNote(remote);
+    const selectedDraft = draftConflict.draft;
+    const currentEditorContent = getLatestDraftContent();
+    const content = selectedDraft && editContentRef.current === selectedDraft.content
+      ? selectedDraft.content
+      : currentEditorContent;
+    editContentRef.current = content;
+    const title = editTitleRef.current;
+    const version = draftVersionRef.current;
+    setDraftConflict(null);
+    setAutosaveState("saving");
+    try {
+      await persistDraftFor(remote, title, content, version);
+      const selectedDraftId = draftConflict.draft?.tabId;
+      if (selectedDraftId && selectedDraftId !== getEditorTabOwnerId() && user && typeof window !== "undefined") {
+        try { discardNoteDraft(window.localStorage, user.id, remote.id, selectedDraftId); } catch { /* Storage may be unavailable. */ }
+      }
+    } catch (error) {
+      console.error("Failed to resolve note conflict", error);
+      setAutosaveState("error");
+    }
+  };
+
+  const useSavedAfterConflict = () => {
+    if (!draftConflict || !user || typeof window === "undefined") return;
+    const remote = draftConflict.remote;
+    noteWrites.observeNote(remote);
+    setActiveNote(remote);
+    editTitleRef.current = remote.title;
+    editContentRef.current = remote.content;
+    setEditTitle(remote.title);
+    setEditContent(remote.content);
+    draftTouchedRef.current = false;
+    draftVersionRef.current += 1;
+    setRichEditorDirty(false);
+    setDraftConflict(null);
+    setAutosaveState("saved");
+    try {
+      discardNoteDraft(window.localStorage, user.id, remote.id, draftConflict.draft?.tabId ?? getEditorTabOwnerId());
+    } catch { /* Storage may be unavailable. */ }
+  };
 
   if (loading || !user) {
-    return <AppLayoutSkeleton />;
+    return <AppLayoutSkeleton lang={lang} />;
   }
 
   return (
-    <div className="h-screen w-screen bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
+    <div className="h-[100dvh] w-full bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
       {operationError && (
         <div role="alert" className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90vw] rounded-lg border border-rose-500/40 bg-rose-950 px-4 py-3 text-sm text-rose-100 shadow-xl flex items-center gap-3">
           <span>{operationError.message}</span>
-          <button type="button" onClick={() => setOperationError(null)} aria-label="Dismiss error" className="text-rose-200 hover:text-white">×</button>
+          <button type="button" onClick={() => setOperationError(null)} aria-label={t.dismissError} className="text-rose-200 hover:text-white">×</button>
         </div>
       )}
       {/* Sidebar Tree Navigation */}
@@ -786,10 +1182,10 @@ export default function AppHome() {
             setIsMobileSidebarOpen(false);
             return;
           }
-          if (!confirmDiscardDraft()) return;
+          stashCurrentDraft();
+          void saveActiveDraft();
           selectActiveNote(id);
-          setIsEditing(false);
-          setRichEditorDirty(false);
+    setRichEditorDirty(false);
           setFocusEditorOnOpen(false);
           setIsMobileSidebarOpen(false);
         }}
@@ -820,398 +1216,208 @@ export default function AppHome() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#0c0d0e] relative overflow-hidden">
         {isLoadingNote ? (
-          <NoteContentSkeleton onOpenMobile={() => setIsMobileSidebarOpen(true)} />
+          <NoteContentSkeleton lang={lang} onOpenMobile={() => setIsMobileSidebarOpen(true)} />
         ) : activeNote ? (
           <>
-            {/* Top Toolbar */}
-            <div className="h-14 border-b border-neutral-800/80 px-3 sm:px-6 flex items-center justify-between bg-neutral-900/40 backdrop-blur-md z-10">
-              <div className="flex items-center gap-2 sm:gap-3 truncate min-w-0">
-                {/* Mobile Menu Hamburger Button */}
+            {/* Note title and writing controls */}
+            <div className="min-h-14 border-b border-neutral-800/80 bg-neutral-900/40 px-2 py-2 sm:px-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 z-10">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsMobileSidebarOpen(true)}
-                  className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer shrink-0"
-                  title="Open Sidebar"
+                  className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-indigo-400"
+                  aria-label={t.openNotes}
                 >
-                  <Menu className="w-5 h-5" />
+                  <Menu className="h-5 w-5" />
                 </button>
-
-                <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                    activeColorKey !== "default"
-                      ? activeTheme.badgeBg
-                      : "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="font-semibold text-sm text-neutral-100 bg-neutral-800/80 hover:bg-neutral-800 focus:bg-neutral-900 border border-neutral-700/60 focus:border-indigo-500/80 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 w-44 sm:w-64 md:w-80 transition-all truncate"
-                    placeholder={t.noteTitlePlaceholder}
-                    title={lang === "th" ? "แก้ไขชื่อโน้ต" : "Edit note title"}
-                  />
-                ) : isEditingTitle ? (
-                  <input
-                    ref={titleInputRef}
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void handleRenameActiveNote(editTitle);
-                      } else if (e.key === "Escape") {
-                        setIsEditingTitle(false);
-                        setEditTitle(activeNote.title);
-                      }
-                    }}
-                    onBlur={() => {
-                      void handleRenameActiveNote(editTitle);
-                    }}
-                    className="font-semibold text-sm text-neutral-100 bg-neutral-900 border border-indigo-500/80 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 w-44 sm:w-64 md:w-80 shadow-lg transition-all"
-                    placeholder={t.noteTitlePlaceholder}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditTitle(activeNote.title);
-                      setIsEditingTitle(true);
-                      setTimeout(() => {
-                        titleInputRef.current?.focus();
-                        titleInputRef.current?.select();
-                      }, 50);
-                    }}
-                    className="group flex items-center gap-1.5 font-semibold text-sm text-neutral-200 hover:text-white px-2 py-1 -mx-2 rounded-lg hover:bg-neutral-800/70 border border-transparent hover:border-neutral-700/60 transition-all cursor-pointer max-w-[200px] sm:max-w-xs md:max-w-md truncate text-left"
-                    title={lang === "th" ? "คลิกเพื่อแก้ไขชื่อโน้ต" : "Click to edit title"}
-                  >
-                    <span className="truncate">{activeNote.title || (lang === "th" ? "โน้ตไม่มีชื่อ" : "Untitled Note")}</span>
-                    <Edit3 className="w-3 h-3 text-neutral-500 group-hover:text-indigo-400 opacity-60 group-hover:opacity-100 transition-all shrink-0" />
-                  </button>
-                )}
+                <FileText className="h-5 w-5 shrink-0 text-indigo-400" aria-hidden="true" />
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(event) => updateEditTitle(event.target.value)}
+                  className="min-w-0 flex-1 max-w-2xl rounded-lg border border-transparent bg-transparent px-2 py-2 text-base font-semibold text-neutral-100 placeholder:text-neutral-600 hover:border-neutral-800 focus:border-neutral-700 focus:bg-neutral-900 focus:outline-none"
+                  placeholder={t.noteTitlePlaceholder}
+                  aria-label={t.noteTitleLabel}
+                />
                 {isShared && (
-                  <span className="hidden sm:flex items-center gap-1.5 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-medium">
-                    <Globe className="w-3 h-3" />
-                    <span>{t.publicSharedBadge}</span>
+                  <span className="hidden shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/25 px-2.5 py-1 text-[10px] font-medium text-emerald-400 sm:flex">
+                    <Globe className="h-3 w-3" />{t.publicSharedBadge}
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* Voice Dictation Button (Always available with ⌥Space / ⌘J) */}
-                <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
-
-                {isEditing ? (
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-1 md:w-auto md:justify-end md:gap-1.5">
+                {autosaveState === "error" && !draftConflict ? (
                   <>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        aria-haspopup="menu"
-                        aria-expanded={isInsertMenuOpen}
-                        onClick={() => setIsInsertMenuOpen(open => !open)}
-                        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-colors"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>{lang === "th" ? "แทรก" : "Insert"}</span>
-                      </button>
-                      {isInsertMenuOpen && (
-                        <div role="menu" className="absolute right-0 top-full z-50 mt-1 min-w-48 rounded-md border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => { setIsInsertMenuOpen(false); setIsChartWizardOpen(true); }}
-                            className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800"
-                          >
-                            <Code2 className="h-4 w-4 text-neutral-400" />
-                            {lang === "th" ? "แผนภาพและกราฟ" : "Chart and diagram"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Theme Color Picker */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                        title={t.noteColor}
-                        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                      >
-                        <Palette className="w-3.5 h-3.5 text-amber-400" />
-                        <span className={`w-2 h-2 rounded-full ${activeTheme.dotColor}`} />
-                      </button>
-
-                      {isColorPickerOpen && (
-                        <div className="absolute top-full mt-2 right-0 z-50 bg-neutral-900 border border-neutral-700/80 shadow-2xl rounded-xl p-2.5 flex items-center gap-2 animate-in fade-in zoom-in-95">
-                          {(Object.keys(NOTE_THEMES) as NoteColorKey[]).map((cKey) => {
-                            const themeOpt = NOTE_THEMES[cKey];
-                            return (
-                              <button
-                                key={cKey}
-                                type="button"
-                                onClick={() => handleSelectTheme(cKey)}
-                                title={themeOpt.label[lang] || themeOpt.label.en}
-                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${themeOpt.dotColor} ${
-                                  activeColorKey === cKey
-                                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-900"
-                                    : ""
-                                }`}
-                              >
-                                {activeColorKey === cKey && (
-                                  <Check className="w-3 h-3 text-white stroke-[3]" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
-
-                    {/* Cancel & Save */}
-                    <button
-                      onClick={cancelEditing}
-                      className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
-                    >
-                      {t.cancelEdit}
-                    </button>
-                    <button
-                      onClick={handleSaveNote}
-                      disabled={isSaving}
-                      title={`${t.saveNote} (${formatComboDisplay(shortcuts.saveNote)})`}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all shadow-sm hover:shadow-indigo-500/20 cursor-pointer"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{isSaving ? t.saving : t.saveNote}</span>
+                    <span role="status" aria-live="polite" className="max-w-24 truncate text-[10px] text-neutral-500 md:max-w-36 md:text-xs">{t.saveFailed}</span>
+                    <button type="button" onClick={() => void saveActiveDraft()} title={t.retrySave} aria-label={t.retrySave} className="inline-flex h-10 items-center gap-1 rounded-lg px-2 text-xs text-neutral-300 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-indigo-400">
+                      <RotateCcw className="h-4 w-4" /><span className="hidden sm:inline">{t.retrySave}</span>
                     </button>
                   </>
                 ) : (
-                  <>
-                    {/* Theme Color Picker */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                        title={t.noteColor}
-                        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                      >
-                        <Palette className="w-3.5 h-3.5 text-amber-400" />
-                        <span className={`w-2 h-2 rounded-full ${activeTheme.dotColor}`} />
-                      </button>
-
-                      {isColorPickerOpen && (
-                        <div className="absolute top-full mt-2 right-0 z-50 bg-neutral-900 border border-neutral-700/80 shadow-2xl rounded-xl p-2.5 flex items-center gap-2 animate-in fade-in zoom-in-95">
-                          {(Object.keys(NOTE_THEMES) as NoteColorKey[]).map((cKey) => {
-                            const themeOpt = NOTE_THEMES[cKey];
-                            return (
-                              <button
-                                key={cKey}
-                                type="button"
-                                onClick={() => handleSelectTheme(cKey)}
-                                title={themeOpt.label[lang] || themeOpt.label.en}
-                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${themeOpt.dotColor} ${
-                                  activeColorKey === cKey
-                                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-900"
-                                    : ""
-                                }`}
-                              >
-                                {activeColorKey === cKey && (
-                                  <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Find in Note Button */}
-                    <button
-                      onClick={() => window.dispatchEvent(new CustomEvent("nota:open-find"))}
-                      title={`${t.findInNote} (${formatComboDisplay(shortcuts.findInNote)})`}
-                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                    >
-                      <Search className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Share Button */}
-                    <button
-                      onClick={() => setIsShareModalOpen(true)}
-                      title={t.shareNote}
-                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                        isShared
-                          ? "bg-emerald-600/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/25"
-                          : "bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-300 border border-neutral-700/50"
-                      }`}
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">{t.shareNote}</span>
-                    </button>
-
-                    <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
-
-                    {/* Edit Button */}
-                    <button
-                      onClick={() => beginEditing(activeNote.content)}
-                      title={`${t.editNote} (${formatComboDisplay(shortcuts.toggleEdit)})`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/50 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
-                      <span className="hidden sm:inline">{t.editNote}</span>
-                    </button>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => {
-                        if (confirm(t.deleteNoteConfirm(activeNote.title))) {
-                          handleDeleteNote(activeNote.id);
-                        }
-                      }}
-                      className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer"
-                      title={t.deleteNote}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </>
+                  <span role="status" aria-live="polite" className="max-w-16 truncate text-[10px] text-neutral-500 md:max-w-36 md:text-xs">
+                    {autosaveState === "saving"
+                      ? t.saving
+                      : autosaveState === "error"
+                        ? t.saveFailed
+                        : t.saved}
+                  </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleEditorModeChange(activeEditorMode === "visual" ? "markdown" : "visual")}
+                  disabled={activeEditorMode === "markdown" && !editorCompatibility.supported}
+                  title={activeEditorMode === "visual" ? t.editMarkdown : t.switchToWrite}
+                  aria-label={activeEditorMode === "visual" ? t.markdownMode : t.writeMode}
+                  className="min-h-10 rounded-lg border border-neutral-800 px-2.5 text-xs font-medium text-neutral-300 hover:bg-neutral-800 hover:text-white disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  {activeEditorMode === "visual" ? t.markdownMode : t.writeMode}
+                </button>
+                <VoiceDictationButton lang={lang} onTranscript={handleVoiceTranscript} />
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("nota:open-find"))}
+                  title={`${t.findInNote} (${formatComboDisplay(shortcuts.findInNote)})`}
+                  aria-label={t.findInNote}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+                {!activeNote.id.startsWith("local:") && (
+                  <button
+                    type="button"
+                    onClick={() => { setShareError(""); setIsShareModalOpen(true); }}
+                    title={t.shareNote}
+                    aria-label={t.shareNote}
+                    className={`flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-indigo-400 ${isShared ? "text-emerald-300 hover:bg-emerald-950/40" : "text-neutral-400 hover:bg-neutral-800 hover:text-white"}`}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">{t.shareNote}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeNote.id.startsWith("local:")) {
+                      if (user) {
+                        try { discardNoteDraft(window.localStorage, user.id, activeNote.id, getEditorTabOwnerId()); } catch { /* Storage may be unavailable. */ }
+                      }
+                      selectActiveNote(null);
+                      setActiveNote(null);
+                    } else if (confirm(t.deleteNoteConfirm(activeNote.title))) {
+                      void handleDeleteNote(activeNote.id);
+                    }
+                  }}
+                  title={activeNote.id.startsWith("local:") ? t.closeNewNote : t.deleteNote}
+                  aria-label={activeNote.id.startsWith("local:") ? t.closeNewNote : t.deleteNote}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-800 hover:text-rose-400 focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
 
-            {/* Note Body: Markdown Viewer OR Editor */}
-            {isEditing ? (
-              <div className={`flex-1 min-h-0 flex flex-col gap-4 p-4 sm:p-8 max-w-7xl mx-auto w-full transition-colors duration-300 ${
-                NOTE_THEMES[parseNoteTheme(activeNote?.content || "").color]?.editorBg || "bg-neutral-950"
-              }`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div role="group" aria-label={lang === "th" ? "โหมดแก้ไขโน้ต" : "Note editing mode"} className="inline-flex items-center rounded-md border border-neutral-800 p-0.5">
-                    <button
-                      type="button"
-                      aria-pressed={activeEditorMode === "visual"}
-                      disabled={!editorCompatibility.supported}
-                      onClick={() => handleEditorModeChange("visual")}
-                      className={`rounded px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${activeEditorMode === "visual" ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
-                    >
-                      {lang === "th" ? "เขียนง่าย" : "Visual"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={activeEditorMode === "markdown"}
-                      onClick={() => handleEditorModeChange("markdown")}
-                      className={`rounded px-3 py-1.5 text-xs transition-colors ${activeEditorMode === "markdown" ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
-                    >
-                      Markdown
-                    </button>
+            {draftConflict && (
+              <div role="alert" className="space-y-3 border-b border-amber-500/30 bg-amber-950/30 px-4 py-3 text-sm text-amber-100 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p>{draftConflict.localDrafts && draftConflict.localDrafts.length > 1 ? t.draftConflictMany : t.draftConflictOne}</p>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={() => void keepMineAfterConflict()} className="min-h-10 rounded-md bg-amber-200 px-3 text-xs font-semibold text-neutral-950 hover:bg-amber-100">{t.keepSelectedDraft}</button>
+                    <button type="button" onClick={useSavedAfterConflict} className="min-h-10 rounded-md border border-amber-200/40 px-3 text-xs text-amber-100 hover:bg-amber-900/50">{t.useSavedDraft}</button>
                   </div>
-                  {!editorCompatibility.supported && (
-                    <span role="status" className="max-w-xl text-xs text-neutral-500">
-                      {unsupportedEditorMessage(editorCompatibility.reason, lang)}
-                    </span>
-                  )}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                    {t.noteTitleLabel}
-                  </label>
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => { markDraftTouched(); setEditTitle(e.target.value); }}
-                    className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl px-4 py-2.5 text-lg font-bold text-neutral-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-                    placeholder={t.noteTitlePlaceholder}
-                  />
-                </div>
-                <div className="flex-1 min-h-0 flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                      {activeEditorMode === "visual" ? (lang === "th" ? "เนื้อหาโน้ต" : "Note content") : t.markdownContentLabel}
-                    </label>
-                    <span className="text-xs text-neutral-500" role="status">
-                      {isSaving ? t.saving : isDraftDirty ? (lang === "th" ? "ยังไม่บันทึก" : "Unsaved changes") : (lang === "th" ? "บันทึกแล้ว" : "Saved")}
-                    </span>
+                {draftConflict.localDrafts && draftConflict.localDrafts.length > 1 && (
+                  <div className="flex flex-wrap gap-2" aria-label={t.localDrafts}>
+                    {draftConflict.localDrafts.map((localDraft, index) => (
+                      <button
+                        key={localDraft.tabId || `${localDraft.noteId}-${index}`}
+                        type="button"
+                        aria-pressed={draftConflict.draft === localDraft}
+                        onClick={() => selectLocalConflictDraft(localDraft)}
+                        className={`min-h-10 max-w-full rounded-md border px-3 py-2 text-left text-xs focus-visible:outline-2 focus-visible:outline-amber-200 ${draftConflict.draft === localDraft ? "border-amber-200 bg-amber-200/10" : "border-amber-200/30 hover:bg-amber-900/40"}`}
+                      >
+                        <span className="block max-w-64 truncate font-medium">{localDraft.title.trim() || t.noteTitlePlaceholder}</span>
+                        <span className="block max-w-64 truncate text-amber-100/60">{localDraft.content.replace(/\s+/g, " ").slice(0, 90)}</span>
+                      </button>
+                    ))}
                   </div>
-                  {activeEditorMode === "visual" ? (
-                    <RichNoteEditor
-                      ref={richEditorInstanceRef}
-                      initialContent={editContent}
-                      onChange={(value) => { markDraftTouched(); setEditContent(value); }}
-                      onDirtyChange={setRichEditorDirty}
-                      autoFocus={focusEditorOnOpen}
-                      lang={lang}
-                    />
-                  ) : (
-                    <MarkdownNoteEditor
-                      ref={editorInstanceRef}
-                      noteId={activeNote.id}
-                      value={editContent}
-                      onChange={(value) => { markDraftTouched(); setEditContent(value); }}
-                      autoFocus={focusEditorOnOpen}
-                      lang={lang}
-                    />
-                  )}
-                </div>
+                )}
               </div>
-            ) : (
-              <MarkdownViewer
-                note={activeNote}
-                lang={lang}
-                onUpdateContent={async (newContent) => {
-                  if (!activeNoteId) return;
-                  try {
-                    const targetId = activeNoteId;
-                    const updatedNote = await patchNote(targetId, { content: newContent });
-                    if (activeNoteIdRef.current === targetId) setEditContent(updatedNote.content);
-                  } catch (err) {
-                    console.error("Failed to update note content", err);
-                  }
-                }}
-              />
             )}
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-3 sm:px-6 sm:py-5 md:px-8">
+              {!editorCompatibility.supported || richEditorAlignmentFailed || (editorCompatibility.supported && editorCompatibility.coverage === "partial") ? (
+                <p role="status" className="mb-2 text-xs text-neutral-500">
+                  {!editorCompatibility.supported
+                    ? unsupportedEditorMessage(editorCompatibility.reason, lang)
+                    : richEditorAlignmentFailed
+                      ? (lang === "th" ? "เปิด Markdown เพื่อรักษารูปแบบเดิมของโน้ตนี้" : "Markdown is open to preserve this note's original formatting.")
+                      : partialEditorMessage(editorCompatibility.opaqueReasons, lang)}
+                </p>
+              ) : null}
+              {activeEditorMode === "visual" ? (
+                <RichNoteEditor
+                  key={activeNote.id}
+                  ref={richEditorInstanceRef}
+                  initialContent={editContent}
+                  onChange={updateEditContent}
+                  onDirtyChange={setRichEditorDirty}
+                  onAlignmentFailure={() => {
+                    setRichEditorAlignmentFailureNoteId(activeNote.id);
+                    setActiveEditorMode("markdown");
+                  }}
+                  autoFocus={focusEditorOnOpen}
+                  lang={lang}
+                  onOpenDiagram={openChartWizard}
+                />
+              ) : (
+                <MarkdownNoteEditor
+                  key={activeNote.id}
+                  ref={editorInstanceRef}
+                  noteId={activeNote.id}
+                  value={editContent}
+                  onChange={updateEditContent}
+                  autoFocus={focusEditorOnOpen}
+                  lang={lang}
+                />
+              )}
+            </div>
           </>
         ) : (
           /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 text-center relative">
+          <div className="relative flex flex-1 flex-col items-center justify-center p-4 text-center sm:p-8">
             {/* Mobile Top Bar with Menu button for Empty State */}
-            <div className="md:hidden absolute top-4 left-4 z-10">
+            <div className="lg:hidden absolute top-4 left-4 z-10">
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="p-2 text-neutral-400 hover:text-neutral-100 bg-neutral-900/90 border border-neutral-800 rounded-xl shadow-lg transition-colors cursor-pointer flex items-center gap-2 text-xs"
+                className="flex min-h-10 items-center gap-2 rounded-lg border border-neutral-800 px-3 text-xs text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-indigo-400"
               >
                 <Menu className="w-4 h-4" />
-                <span>Menu</span>
+                <span>{t.notesMenu}</span>
               </button>
             </div>
 
-            {/* Subtle background glow */}
-            <div className="absolute w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -top-20" />
-            
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-center text-indigo-400 mb-5 sm:mb-6 shadow-2xl shadow-indigo-500/10 ring-1 ring-neutral-800">
-              <UploadCloud className="w-8 h-8 sm:w-9 sm:h-9 animate-pulse" />
-            </div>
-            <h2 className="text-xl sm:text-3xl font-bold text-neutral-100 mb-2.5 sm:mb-3 tracking-tight">
+            <FileText className="mb-4 h-7 w-7 text-neutral-500" aria-hidden="true" />
+            <h2 className="mb-2 text-lg font-semibold tracking-tight text-neutral-100 sm:text-xl">
               {t.emptyHeroTitle}
             </h2>
-            <p className="text-neutral-400 text-sm max-w-lg mb-8 leading-relaxed">
+            <p className="mb-6 max-w-lg text-sm leading-relaxed text-neutral-400">
               {t.emptyHeroDesc}
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={() => setIsUploadOpen(true)}
-                className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>{t.dropNowBtn}</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <button
                 onClick={() => handleCreateNote(selectedFolderId)}
-                className="py-2.5 px-5 bg-neutral-800/90 hover:bg-neutral-700/80 text-neutral-200 border border-neutral-700/50 rounded-xl text-sm font-medium transition-all flex items-center gap-2 cursor-pointer"
+                className="flex min-h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-indigo-300"
               >
-                <FileText className="w-4 h-4" />
+                <FileText className="h-4 w-4" />
                 <span>{t.createEmptyBtn}</span>
+              </button>
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="flex min-h-11 items-center gap-2 rounded-lg border border-neutral-800 px-4 text-sm text-neutral-300 hover:bg-neutral-900 focus-visible:outline-2 focus-visible:outline-indigo-400"
+              >
+                <UploadCloud className="h-4 w-4" />
+                <span>{t.dropNowBtn}</span>
               </button>
             </div>
           </div>
@@ -1221,16 +1427,17 @@ export default function AppHome() {
       {/* Share Modal */}
       {isShareModalOpen && activeNote && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
-          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6">
+          <div role="dialog" aria-modal="true" aria-labelledby="share-modal-title" className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
                   <Share2 className="w-4 h-4" />
                 </div>
-                <h3 className="font-semibold text-neutral-100">{t.shareModalTitle}</h3>
+                <h3 id="share-modal-title" className="font-semibold text-neutral-100">{t.shareModalTitle}</h3>
               </div>
               <button
                 onClick={() => setIsShareModalOpen(false)}
+                aria-label={t.closeBtn}
                 className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 transition-colors"
               >
                 ✕
@@ -1240,6 +1447,8 @@ export default function AppHome() {
             <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
               {t.shareModalDesc}
             </p>
+
+            {shareError && <p role="alert" className="mb-4 text-sm text-rose-300">{shareError}</p>}
 
             <div className="p-4 bg-neutral-950/70 border border-neutral-800 rounded-xl space-y-4 mb-6">
               <div className="flex items-center justify-between">
@@ -1255,6 +1464,7 @@ export default function AppHome() {
                 </div>
                 <button
                   onClick={() => handleToggleShare(!isShared)}
+                  aria-label={isShared ? t.disableShareBtn : t.enableShareBtn}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     isShared
                       ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30"
@@ -1342,10 +1552,12 @@ export default function AppHome() {
 
       {/* Visual Chart Wizard Modal */}
       <ChartWizardModal
+        key={chartWizardInstanceKey}
         isOpen={isChartWizardOpen}
         onClose={() => setIsChartWizardOpen(false)}
         onInsertChart={handleInsertChart}
         lang={lang}
+        initialType="flowchart"
       />
     </div>
   );

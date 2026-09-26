@@ -4,80 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import {
-  BookOpen,
-  KeyRound,
-  Mail,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  Sparkles,
-  CheckCircle2,
-  FileCode,
-  Network,
-  Shield,
-  Loader2,
-} from "lucide-react";
+import { KeyRound, Mail, ArrowRight, Eye, EyeOff, Network, FolderTree, Loader2 } from "lucide-react";
 import LanguageToggle from "@/components/LanguageToggle";
 import { postLoginPath } from "@/lib/auth-redirect";
-
-const I18N = {
-  en: {
-    heroTag: "Next-Gen Knowledge Base",
-    heroTitle: "Write, Visualize & Organize in Pure Markdown",
-    heroDesc:
-      "Transform flat text into interactive documents with automatic table of contents, live Mermaid diagrams, and instant full-text search.",
-    feature1Title: "Interactive Diagram Engine",
-    feature1Desc: "Generate flowcharts, sequence diagrams, and class architectures on the fly.",
-    feature2Title: "Seamless Cloud Sync",
-    feature2Desc: "Instant persistence with Supabase PostgreSQL and end-to-end data isolation.",
-    quote: "“The fastest way to turn raw developer thoughts into polished, readable knowledge.”",
-    author: "Engineered for high-performing teams",
-    signInTitle: "Welcome back",
-    signInSub: "Sign in to access your Nota workspace",
-    emailLabel: "Email address",
-    emailPlaceholder: "name@company.com",
-    passwordLabel: "Password",
-    passwordPlaceholder: "••••••••",
-    forgotPass: "Forgot password?",
-    signInBtn: "Sign in to account",
-    signingIn: "Authenticating...",
-    noAccount: "Don't have an account yet?",
-    signUpLink: "Create an account",
-    unverifiedNotice: "Please verify your email address to continue",
-    verifyLinkText: "Click here to verify email →",
-  },
-  th: {
-    heroTag: "คลังจัดการความรู้เจเนอเรชันใหม่",
-    heroTitle: "เขียน วาดกราฟ และจัดระเบียบใน Markdown",
-    heroDesc:
-      "เปลี่ยนไฟล์ข้อความธรรมดาให้กลายเป็นเอกสารระดับโปร พร้อมสารบัญเลื่อนตามอัตโนมัติ แผนภาพ Mermaid และระบบค้นหาเนื้อหาทันใจ",
-    feature1Title: "ระบบวาดกราฟไดอะแกรมในตัว",
-    feature1Desc: "สร้าง Flowchart, Sequence และโครงสร้าง Class ได้ทันทีจากบล็อกโค้ด",
-    feature2Title: "ซิงค์ข้อมูลบน Cloud ทันที",
-    feature2Desc: "จัดเก็บบน Supabase PostgreSQL พร้อมระบบความปลอดภัยแยกข้อมูลส่วนบุคคล",
-    quote: "“วิธีที่เร็วที่สุดในการเปลี่ยนบันทึกข้อความดิบให้เป็นคลังความรู้ที่อ่านง่ายและสวยงาม”",
-    author: "ออกแบบมาเพื่อทีมและนักพัฒนายุดใหม่",
-    signInTitle: "ยินดีต้อนรับกลับมา",
-    signInSub: "ลงชื่อเข้าใช้เพื่อเปิดคลังโน้ต Nota ของคุณ",
-    emailLabel: "อีเมล",
-    emailPlaceholder: "name@company.com",
-    passwordLabel: "รหัสผ่าน",
-    passwordPlaceholder: "••••••••",
-    forgotPass: "ลืมรหัสผ่าน?",
-    signInBtn: "เข้าสู่ระบบ",
-    signingIn: "กำลังเข้าสู่ระบบ...",
-    noAccount: "ยังไม่มีบัญชีใช้งาน?",
-    signUpLink: "สมัครสมาชิกใหม่",
-    unverifiedNotice: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ",
-    verifyLinkText: "คลิกที่นี่เพื่อไปหน้ายืนยันอีเมล →",
-  },
-};
+import { AUTH_COPY, getLoginError } from "@/lib/authCopy";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [lang, setLang] = useState<"en" | "th">("en");
-  const t = I18N[lang];
+  const [lang, setLang] = useLanguagePreference();
+  const t = AUTH_COPY[lang];
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -104,13 +40,14 @@ export default function LoginPage() {
         if (data.requiresVerification) {
           setRequiresVerification(true);
         }
-        throw new Error(data.error || "Login failed");
+        setError(getLoginError(res.status, lang));
+        return;
       }
 
       router.push(postLoginPath(window.location.search));
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch {
+      setError(t.loginError);
     } finally {
       setLoading(false);
     }
@@ -118,7 +55,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-screen bg-[#090a0f] text-neutral-100 flex flex-col lg:flex-row overflow-x-hidden font-sans select-none">
-      {/* LEFT PANE: Global Product Hero Showcase (Hidden on small mobile, visible on desktop) */}
+      {/* Product summary */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#0e1017] via-[#090a0f] to-[#120f24] border-r border-neutral-800/70 p-12 flex-col justify-between relative overflow-hidden">
         {/* Ambient Gradient Glows */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-[140px] pointer-events-none" />
@@ -139,18 +76,18 @@ export default function LoginPage() {
             <span className="text-lg font-bold tracking-tight text-white">
               Nota
             </span>
-            <span className="text-[11px] text-neutral-400">Intelligent Knowledge Cloud</span>
+            <span className="text-[11px] text-neutral-400">{t.productLabel}</span>
           </div>
         </div>
 
-        {/* Center: Showcase Content & Interactive Preview Cards */}
+        {/* Product summary */}
         <div className="relative z-10 my-auto py-10 max-w-lg">
           <h1 className="text-4xl xl:text-5xl font-extrabold tracking-tight text-white leading-tight mb-4">
-            {t.heroTitle}
+            {t.loginTitle}
           </h1>
 
           <p className="text-neutral-400 text-sm xl:text-base leading-relaxed mb-8">
-            {t.heroDesc}
+            {t.loginDescription}
           </p>
 
           {/* Feature Highlight Cards */}
@@ -160,30 +97,23 @@ export default function LoginPage() {
                 <Network className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-neutral-200">{t.feature1Title}</h4>
-                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.feature1Desc}</p>
+                <h4 className="text-xs font-semibold text-neutral-200">{t.loginFeatureOne}</h4>
+                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.loginFeatureOneDescription}</p>
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md flex items-start gap-3.5 shadow-sm">
               <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
-                <Shield className="w-5 h-5" />
+                <FolderTree className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-neutral-200">{t.feature2Title}</h4>
-                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.feature2Desc}</p>
+                <h4 className="text-xs font-semibold text-neutral-200">{t.loginFeatureTwo}</h4>
+                <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">{t.loginFeatureTwoDescription}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Bottom Social Proof / Testimonial Quote */}
-        <div className="relative z-10 pt-6 border-t border-neutral-800/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-neutral-300 italic font-medium">{t.quote}</p>
-            <p className="text-[11px] text-neutral-500 mt-1">{t.author}</p>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT PANE: Authentication Form */}
@@ -215,7 +145,7 @@ export default function LoginPage() {
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">
               {t.signInTitle}
             </h2>
-            <p className="text-neutral-400 text-sm">{t.signInSub}</p>
+            <p className="text-neutral-400 text-sm">{t.signInDescription}</p>
           </div>
 
           {requiresVerification && (
@@ -227,7 +157,7 @@ export default function LoginPage() {
                 href={`/verify-email?email=${encodeURIComponent(email)}`}
                 className="text-xs text-amber-300 hover:text-amber-200 underline font-medium"
               >
-                {t.verifyLinkText}
+                {t.verifyEmail}
               </Link>
             </div>
           )}
@@ -266,7 +196,7 @@ export default function LoginPage() {
                   href="/reset-password"
                   className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
-                  {t.forgotPass}
+                  {t.forgotPassword}
                 </Link>
               </div>
               <div className="relative">
@@ -282,6 +212,8 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? t.hidePassword : t.showPassword}
+                  title={showPassword ? t.hidePassword : t.showPassword}
                   className="absolute right-3 top-2.5 text-neutral-500 hover:text-neutral-300 p-0.5 cursor-pointer"
                   tabIndex={-1}
                 >
@@ -303,7 +235,7 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <span>{t.signInBtn}</span>
+                  <span>{t.signIn}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -317,14 +249,14 @@ export default function LoginPage() {
               href="/register"
               className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4"
             >
-              {t.signUpLink}
+              {t.createAccount}
             </Link>
           </p>
         </div>
 
         {/* Global Footer Legal */}
         <div className="w-full max-w-md mx-auto text-center text-[11px] text-neutral-600">
-          Nota &copy; 2026. Secure & Private Knowledge Management.
+          {t.footer}
         </div>
       </div>
     </div>

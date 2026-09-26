@@ -70,7 +70,14 @@ export default function DropzoneModal({
     if (result.imported.length > 0) onSuccess();
     setFilesToUpload(result.failed.map((item) => item.file));
     if (result.failed.length > 0) {
-      setUploadStatus(result.failed.map((item) => `${item.file.name}: ${item.error}`).join(" · "));
+      setUploadStatus(result.failed.map((item) => {
+        const message = item.error === "Unsupported file type"
+          ? t.importUnsupportedFile
+          : item.error === "Invalid JSON file"
+            ? t.importInvalidJson
+            : t.importFileError;
+        return `${item.file.name}: ${message}`;
+      }).join(" · "));
     } else {
       onClose();
     }
@@ -79,15 +86,16 @@ export default function DropzoneModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="import-modal-title" className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-800">
           <div className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-indigo-400" />
-            <h3 className="font-semibold text-neutral-100 text-sm sm:text-base">{t.importModalTitle}</h3>
+            <h3 id="import-modal-title" className="font-semibold text-neutral-100 text-sm sm:text-base">{t.importModalTitle}</h3>
           </div>
           <button
             onClick={onClose}
+            aria-label={t.closeBtn}
             className="p-1 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -121,6 +129,15 @@ export default function DropzoneModal({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={t.dragDropBoxTitle}
             className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
               isDragging
                 ? "border-indigo-500 bg-indigo-500/10 scale-[1.01]"
@@ -130,9 +147,11 @@ export default function DropzoneModal({
             <input
               type="file"
               ref={fileInputRef}
+              onClick={(event) => event.stopPropagation()}
               onChange={handleFileChange}
               multiple
               accept=".md,.markdown,.csv,.tsv,.json,text/markdown,text/csv,application/json"
+              aria-label={t.dragDropBoxTitle}
               className="hidden"
             />
             <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
@@ -170,10 +189,12 @@ export default function DropzoneModal({
                         </span>
                       </div>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveFile(idx);
                         }}
+                        aria-label={lang === "th" ? `นำไฟล์ ${file.name} ออก` : `Remove ${file.name}`}
                         className="text-neutral-500 hover:text-rose-400 p-1 rounded"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -186,7 +207,7 @@ export default function DropzoneModal({
           )}
 
           {uploadStatus && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+            <div role="alert" className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{uploadStatus}</span>
             </div>

@@ -105,8 +105,8 @@ const MarkdownNoteEditor = forwardRef<MarkdownNoteEditorHandle, MarkdownNoteEdit
       </div>
       {error && <p role="alert" className="border-b border-neutral-800 px-3 py-2 text-xs text-rose-300">{error}</p>}
       <div className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-3 py-2 text-xs text-neutral-400 lg:hidden">
-        <span>{lang === "th" ? "แก้ Markdown แล้วดูผลลัพธ์" : "Write Markdown and see the result"}</span>
-        <div role="group" aria-label={lang === "th" ? "มุมมอง editor" : "Editor view"} className="flex rounded border border-neutral-700 p-0.5">
+        <span>{lang === "th" ? "แก้ Markdown พร้อมดูตัวอย่าง" : "Edit Markdown and preview"}</span>
+        <div role="group" aria-label={lang === "th" ? "โหมดแก้ไข" : "Editor mode"} className="flex rounded border border-neutral-700 p-0.5">
           <button type="button" aria-pressed={mobileView === "write"} onClick={() => setMobileView("write")} className={`rounded px-2 py-1 ${mobileView === "write" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}>{lang === "th" ? "เขียน" : "Write"}</button>
           <button type="button" aria-pressed={mobileView === "preview"} onClick={() => setMobileView("preview")} className={`rounded px-2 py-1 ${mobileView === "preview" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}>{lang === "th" ? "ตัวอย่าง" : "Preview"}</button>
         </div>
@@ -122,7 +122,7 @@ const MarkdownNoteEditor = forwardRef<MarkdownNoteEditorHandle, MarkdownNoteEdit
             aria-label={lang === "th" ? "เนื้อหา Markdown" : "Markdown content"}
             spellCheck
             className="min-h-[360px] flex-1 resize-none overflow-auto bg-transparent p-4 font-mono text-[13px] leading-6 text-neutral-200 outline-none placeholder:text-neutral-600 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-indigo-500"
-            placeholder={lang === "th" ? "เริ่มเขียน Markdown..." : "Start writing Markdown..."}
+            placeholder={lang === "th" ? "เขียนด้วย Markdown" : "Write in Markdown"}
           />
         </div>
         <div className={`${mobileView === "write" ? "hidden lg:flex" : "flex"} min-h-0 min-w-0 flex-col`}>

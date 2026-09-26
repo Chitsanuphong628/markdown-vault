@@ -47,7 +47,7 @@ export default function TableOfContents({ headings, lang = "en" }: TableOfConten
       <div className="text-sm">
         <div className="flex items-center gap-2 font-semibold text-neutral-400 mb-3.5 text-[11px] uppercase tracking-wider sticky top-0 bg-neutral-950/20 backdrop-blur-xs py-1">
           <ListCollapse className="w-3.5 h-3.5 text-indigo-400" />
-          <span>{lang === "th" ? "สารบัญหัวข้อ (TOC)" : "Table of Contents"}</span>
+          <span>{lang === "th" ? "สารบัญ" : "Contents"}</span>
         </div>
         <nav className="space-y-1.5 border-l border-neutral-800">
           {headings.map((heading) => {

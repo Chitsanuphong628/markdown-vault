@@ -3,11 +3,15 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MailCheck, KeyRound, ArrowRight, ShieldCheck, RefreshCw } from "lucide-react";
+import { MailCheck, KeyRound, ArrowRight, ShieldCheck } from "lucide-react";
+import { AUTH_COPY } from "@/lib/authCopy";
+import LanguageToggle from "@/components/LanguageToggle";
+import { useLanguagePreference } from "@/lib/useLanguagePreference";
 
-function VerifyEmailForm() {
+function VerifyEmailForm({ lang }: { lang: "en" | "th" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = AUTH_COPY[lang];
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -34,18 +38,19 @@ function VerifyEmailForm() {
         }),
       });
 
-      const data = await res.json();
+      await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "การยืนยันอีเมลล้มเหลว");
+        setError(res.status === 429 ? t.verificationRateLimited : t.verificationError);
+        return;
       }
 
-      setSuccess("ยืนยันอีเมลสำเร็จแล้ว! กำลังนำคุณเข้าสู่ระบบ...");
+      setSuccess(t.verificationSuccess);
       setTimeout(() => {
         router.push("/");
         router.refresh();
       }, 1500);
-    } catch (err: any) {
-      setError(err.message);
+    } catch {
+      setError(t.verificationError);
     } finally {
       setLoading(false);
     }
@@ -63,11 +68,14 @@ function VerifyEmailForm() {
       const res = await fetch("/api/auth/resend-verification", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "ไม่สามารถส่งรหัสใหม่ได้");
-      setSuccess(data.message);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "ไม่สามารถส่งรหัสใหม่ได้");
+      await res.json();
+      if (!res.ok && res.status !== 429) {
+        setError(t.resendError);
+        return;
+      }
+      setSuccess(t.resendSuccess);
+    } catch {
+      setError(t.resendError);
     } finally { setLoading(false); }
   };
 
@@ -77,9 +85,9 @@ function VerifyEmailForm() {
         <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 mb-3">
           <MailCheck className="w-6 h-6" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">ยืนยันอีเมลของคุณ</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.verifyTitle}</h1>
         <p className="text-neutral-400 text-sm mt-1 text-center">
-          กรอกรหัสยืนยัน 6 หลัก (OTP) ที่ได้รับเพื่อเปิดใช้งานบัญชี
+          {t.verifyDescription}
         </p>
       </div>
 
@@ -98,7 +106,7 @@ function VerifyEmailForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-neutral-300 mb-1.5">อีเมล</label>
+          <label className="block text-xs font-medium text-neutral-300 mb-1.5">{t.emailLabel}</label>
           <input
             type="email"
             required
@@ -110,9 +118,7 @@ function VerifyEmailForm() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-            รหัสยืนยัน 6 หลัก (OTP)
-          </label>
+          <label className="block text-xs font-medium text-neutral-300 mb-1.5">{t.verifyCode}</label>
           <div className="relative">
             <KeyRound className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3" />
             <input
@@ -132,19 +138,19 @@ function VerifyEmailForm() {
           disabled={loading || otp.length < 6}
           className="w-full mt-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
         >
-          {loading ? "กำลังตรวจสอบ..." : "ยืนยันรหัส OTP"}
+          {loading ? t.verifying : t.verify}
           <ArrowRight className="w-4 h-4" />
         </button>
       </form>
 
       <button type="button" disabled={loading || !email} onClick={resendCode} className="mt-4 w-full text-sm text-emerald-400 hover:text-emerald-300 disabled:opacity-50">
-        ส่งรหัสยืนยันใหม่
+        {loading ? t.resendingCode : t.resendCode}
       </button>
 
       <div className="mt-6 text-center text-sm text-neutral-400">
-        ต้องการกลับไปหน้าเข้าสู่ระบบ?{" "}
+        {lang === "th" ? "กลับไปหน้าเข้าสู่ระบบ?" : "Back to sign in?"}{" "}
         <Link href="/login" className="text-emerald-400 hover:text-emerald-300 font-medium">
-          เข้าสู่ระบบ
+          {t.signInLink}
         </Link>
       </div>
     </div>
@@ -152,11 +158,14 @@ function VerifyEmailForm() {
 }
 
 export default function VerifyEmailPage() {
+  const [lang, setLang] = useLanguagePreference();
+  const t = AUTH_COPY[lang];
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-center items-center px-4 relative overflow-hidden">
+      <div className="absolute right-4 top-4 z-10"><LanguageToggle lang={lang} setLang={setLang} /></div>
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <Suspense fallback={<div className="text-neutral-400">กำลังโหลด...</div>}>
-        <VerifyEmailForm />
+      <Suspense fallback={<div className="text-neutral-400">{t.loading}</div>}>
+        <VerifyEmailForm lang={lang} />
       </Suspense>
     </div>
   );

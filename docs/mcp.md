@@ -8,6 +8,8 @@ Nota keeps the ten original tool names and serves them through the official MCP 
 2. Set `ENABLE_MCP=true` only after both migrations are applied. Keep `SUPABASE_SERVICE_ROLE_KEY` on the server only.
 3. Sign in to a verified Nota account, open Settings → MCP, and either connect through OAuth or generate a manual credential. A manual credential is shown once; only its SHA-256 hash is stored. It expires in 90 days and can be revoked from the same page.
 
+In Settings → MCP, choose Cursor, Claude, or ChatGPT. All three clients use the same Nota MCP endpoint. **Add to Cursor** opens Cursor's install prompt when Nota's OAuth discovery and dynamic client registration are available; approve installation and complete OAuth in Cursor. Opening the link alone does not confirm a connection. **Open Claude Connectors** and **Open ChatGPT Plugins** copy the MCP URL and open each client's setup page in a new tab; they do not create a connection automatically. In Claude, use Customize → Connectors → Add custom connector (Team/Enterprise may require an Owner to add it first). In ChatGPT, enable Developer mode, then use the plus button on Plugins to create an app, enter the MCP URL, and scan tools; some accounts expose creation through Settings → Apps → Create. Claude and ChatGPT need a publicly reachable HTTPS endpoint; `localhost` is not reachable from their cloud services. The MCP tab retains manual key and config options for clients that need them.
+
 The old `nota_sec_` JWT and `NOTA_USER_ID` configurations are intentionally rejected. They do not have revocation or safe user binding. Delete them from old client configurations.
 
 ## Local stdio

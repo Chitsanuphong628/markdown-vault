@@ -2,8 +2,9 @@
 
 import React from "react";
 import { Menu } from "lucide-react";
+import { I18N_MAIN, type Language } from "@/lib/i18n";
 
-export function NoteContentSkeleton({ onOpenMobile }: { onOpenMobile?: () => void } = {}) {
+export function NoteContentSkeleton({ onOpenMobile, lang = "en" }: { onOpenMobile?: () => void; lang?: Language } = {}) {
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#0c0d0e] relative overflow-hidden animate-pulse">
       {/* Top Toolbar Skeleton */}
@@ -14,7 +15,8 @@ export function NoteContentSkeleton({ onOpenMobile }: { onOpenMobile?: () => voi
               type="button"
               onClick={onOpenMobile}
               className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer shrink-0"
-              title="Open Sidebar"
+              title={I18N_MAIN[lang].openNotes}
+              aria-label={I18N_MAIN[lang].openNotes}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -79,7 +81,7 @@ export function NoteContentSkeleton({ onOpenMobile }: { onOpenMobile?: () => voi
   );
 }
 
-export function AppLayoutSkeleton() {
+export function AppLayoutSkeleton({ lang = "en" }: { lang?: Language } = {}) {
   return (
     <div className="h-screen w-screen bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
       {/* Sidebar Skeleton */}
@@ -131,7 +133,7 @@ export function AppLayoutSkeleton() {
       </aside>
 
       {/* Main Note Area Skeleton */}
-      <NoteContentSkeleton />
+      <NoteContentSkeleton lang={lang} />
     </div>
   );
 }

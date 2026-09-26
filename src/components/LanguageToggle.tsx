@@ -16,6 +16,8 @@ export default function LanguageToggle({ lang, setLang }: LanguageToggleProps) {
       <button
         type="button"
         onClick={() => setLang("en")}
+        aria-label="English"
+        aria-pressed={lang === "en"}
         className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
           lang === "en"
             ? "bg-indigo-600 text-white font-semibold shadow-sm"
@@ -27,6 +29,8 @@ export default function LanguageToggle({ lang, setLang }: LanguageToggleProps) {
       <button
         type="button"
         onClick={() => setLang("th")}
+        aria-label="ภาษาไทย"
+        aria-pressed={lang === "th"}
         className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
           lang === "th"
             ? "bg-indigo-600 text-white font-semibold shadow-sm"

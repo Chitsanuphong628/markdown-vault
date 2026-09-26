@@ -15,10 +15,11 @@ import {
   Key,
   Keyboard,
   RotateCcw,
-  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import JSZip from "jszip";
-import { Language, I18N_MAIN } from "@/lib/i18n";
+import { Language, I18N_MAIN, I18N_MCP } from "@/lib/i18n";
+import { createCursorInstallUrl, isMcpOAuthMetadataReady } from "@/lib/mcp/connect";
 import {
   DEFAULT_SHORTCUTS,
   ShortcutActionId,
@@ -44,20 +45,20 @@ interface SettingsModalProps {
 interface ToolItem {
   name: string;
   category: "Read" | "Write" | "Share" | "Maintenance";
-  desc: string;
+  desc: { en: string; th: string };
 }
 
 const MCP_TOOLS: ToolItem[] = [
-  { name: "list_notes", category: "Read", desc: "Query, search, and list documents across folders" },
-  { name: "get_note", category: "Read", desc: "Retrieve document body and frontmatter by ID" },
-  { name: "create_note", category: "Write", desc: "Insert a new Markdown note into any destination folder" },
-  { name: "update_note", category: "Write", desc: "Modify document title, markdown content, or folder parent" },
-  { name: "delete_note", category: "Write", desc: "Permanently remove a note from the vault" },
-  { name: "list_folders", category: "Read", desc: "Fetch directory tree and nested sub-folder structure" },
-  { name: "create_folder", category: "Write", desc: "Create a new organization folder or sub-folder" },
-  { name: "delete_folder", category: "Write", desc: "Remove an empty or obsolete folder" },
-  { name: "share_note", category: "Share", desc: "Toggle read-only public web URL sharing" },
-  { name: "scan_and_cleanup", category: "Maintenance", desc: "Read-only counts for your folders and notes" },
+  { name: "list_notes", category: "Read", desc: { en: "List and search notes across folders", th: "แสดงและค้นหาโน้ตในโฟลเดอร์" } },
+  { name: "get_note", category: "Read", desc: { en: "Read a note and its frontmatter by ID", th: "อ่านโน้ตและ frontmatter จาก ID" } },
+  { name: "create_note", category: "Write", desc: { en: "Create a Markdown note in a folder", th: "สร้างโน้ต Markdown ในโฟลเดอร์" } },
+  { name: "update_note", category: "Write", desc: { en: "Edit a note title, content, or folder", th: "แก้ชื่อ เนื้อหา หรือโฟลเดอร์ของโน้ต" } },
+  { name: "delete_note", category: "Write", desc: { en: "Delete a note", th: "ลบโน้ต" } },
+  { name: "list_folders", category: "Read", desc: { en: "List folders and subfolders", th: "แสดงโฟลเดอร์และโฟลเดอร์ย่อย" } },
+  { name: "create_folder", category: "Write", desc: { en: "Create a folder", th: "สร้างโฟลเดอร์" } },
+  { name: "delete_folder", category: "Write", desc: { en: "Delete an empty folder", th: "ลบโฟลเดอร์ที่ไม่มีโน้ต" } },
+  { name: "share_note", category: "Share", desc: { en: "Enable or disable a public link", th: "เปิดหรือปิดลิงก์สาธารณะ" } },
+  { name: "scan_and_cleanup", category: "Maintenance", desc: { en: "Count notes and folders without changing them", th: "นับโน้ตและโฟลเดอร์โดยไม่แก้ข้อมูล" } },
 ];
 
 export default function SettingsModal({
@@ -72,9 +73,13 @@ export default function SettingsModal({
   setLang,
 }: SettingsModalProps) {
   const t = I18N_MAIN[lang] || I18N_MAIN.en;
+  const m = I18N_MCP[lang] || I18N_MCP.en;
   const [activeTab, setActiveTab] = useState<"general" | "shortcuts" | "account" | "data" | "mcp">("general");
-  const [activeConfigTab, setActiveConfigTab] = useState<"oauth" | "cursor" | "claude">("oauth");
+  const [mcpProvider, setMcpProvider] = useState<"cursor" | "claude" | "chatgpt">("cursor");
+  const [manualConfigTab, setManualConfigTab] = useState<"cursor" | "claude">("cursor");
+  const [mcpReadiness, setMcpReadiness] = useState<"checking" | "ready" | "unavailable">("checking");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   // Keyboard shortcuts state
   const [shortcuts, setShortcuts] = useState<Record<ShortcutActionId, string>>(() => getShortcuts());
@@ -89,19 +94,37 @@ export default function SettingsModal({
     statusText: string;
     isWaiting: boolean;
   }>({ total: 0, completed: 0, statusText: "", isWaiting: false });
+  const [exportNotice, setExportNotice] = useState("");
   const cancelExportRef = useRef(false);
 
   // The raw token is shown only at creation time and never persisted in browser storage.
   const [apiKey, setApiKey] = useState("");
   const [credentials, setCredentials] = useState<Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>>([]);
   const [keyError, setKeyError] = useState("");
+  const [credentialsError, setCredentialsError] = useState("");
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
 
   const loadCredentials = async () => {
-    const response = await fetch("/api/auth/api-key", { cache: "no-store" });
-    if (!response.ok) return;
-    const data = await response.json();
-    setCredentials(data.credentials ?? []);
+    try {
+      const response = await fetch("/api/auth/api-key", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setCredentialsError(getKeyFailureMessage(response.status, data.error, m.credentialsLoadError));
+        return;
+      }
+      setCredentials(data.credentials ?? []);
+      setCredentialsError("");
+    } catch {
+      setCredentialsError(m.credentialsLoadError);
+    }
+  };
+
+  const getKeyFailureMessage = (status: number, serverMessage: unknown, fallback: string) => {
+    if (status === 401) return m.keySignIn;
+    if (status === 403) return m.keyVerifyEmail;
+    if (status === 429) return m.keyRateLimited;
+    if (status === 503) return serverMessage === "MCP is not enabled" ? m.keyMcpDisabled : m.keyStorageError;
+    return fallback;
   };
 
   const handleGenerateApiKey = async () => {
@@ -109,26 +132,62 @@ export default function SettingsModal({
     setKeyError("");
     try {
       const response = await fetch("/api/auth/api-key", { method: "POST" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not create key");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setKeyError(getKeyFailureMessage(response.status, data.error, m.keyCreateError));
+        return;
+      }
       setApiKey(data.token);
       await loadCredentials();
-    } catch (error) {
-      setKeyError(error instanceof Error ? error.message : "Could not create key");
+    } catch {
+      setKeyError(m.keyCreateError);
     } finally {
       setIsGeneratingKey(false);
     }
   };
 
   const handleRevokeKey = async (id: string) => {
-    const response = await fetch("/api/auth/api-key", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    if (!response.ok) { setKeyError("Could not revoke key"); return; }
-    setApiKey("");
-    await loadCredentials();
+    setKeyError("");
+    try {
+      const response = await fetch("/api/auth/api-key", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setKeyError(getKeyFailureMessage(response.status, data.error, m.keyRevokeError));
+        return;
+      }
+      setApiKey("");
+      await loadCredentials();
+    } catch {
+      setKeyError(m.keyRevokeError);
+    }
   };
 
   useEffect(() => {
     if (isOpen && activeTab === "mcp") void loadCredentials();
+  }, [isOpen, activeTab]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "mcp") return;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setMcpReadiness("checking");
+    });
+    const checkReadiness = async () => {
+      try {
+        const response = await fetch("/.well-known/oauth-authorization-server", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const metadata: unknown = response.ok ? await response.json() : null;
+        if (!controller.signal.aborted) {
+          setMcpReadiness(response.ok && isMcpOAuthMetadataReady(metadata) ? "ready" : "unavailable");
+        }
+      } catch {
+        if (!controller.signal.aborted) setMcpReadiness("unavailable");
+      }
+    };
+    void checkReadiness();
+    return () => controller.abort();
   }, [isOpen, activeTab]);
 
   useEffect(() => {
@@ -143,11 +202,12 @@ export default function SettingsModal({
 
   const handleExportVault = async () => {
     setIsExporting(true);
+    setExportNotice("");
     cancelExportRef.current = false;
     setExportProgress({
       total: 0,
       completed: 0,
-      statusText: "Initializing export queue...",
+      statusText: m.exportStart,
       isWaiting: false,
     });
 
@@ -157,20 +217,20 @@ export default function SettingsModal({
       let hasMore = true;
       while (hasMore) {
         const indexResponse = await fetch(`/api/notes?page=${page}`);
-        if (!indexResponse.ok) throw new Error(`Unable to load export index (${indexResponse.status})`);
+        if (!indexResponse.ok) throw new Error("export-index");
         const indexData = await indexResponse.json();
         if (Array.isArray(indexData.notes)) exportNotes.push(...indexData.notes);
         hasMore = Boolean(indexData.hasMore);
         page += 1;
-        if (page > 10000) throw new Error("Export index exceeded the safety limit");
+        if (page > 10000) throw new Error("export-limit");
       }
 
       if (exportNotes.length === 0) {
-        setExportProgress((prev) => ({ ...prev, statusText: "No notes to export.", isWaiting: false }));
+        setExportProgress((prev) => ({ ...prev, statusText: m.noNotes, isWaiting: false }));
         return;
       }
 
-      setExportProgress((prev) => ({ ...prev, total: exportNotes.length, statusText: "Exporting all notes..." }));
+      setExportProgress((prev) => ({ ...prev, total: exportNotes.length, statusText: m.exportingNotes }));
       const zip = new JSZip();
       const folderMap = new Map<string, string>();
       folders.forEach((f) => folderMap.set(f.id, f.name));
@@ -178,6 +238,7 @@ export default function SettingsModal({
       const CONCURRENCY = 3;
       const THROTTLE_MS = 120;
       let completedCount = 0;
+      let failedCount = 0;
 
       interface NoteExportPayload {
         id: string;
@@ -204,7 +265,7 @@ export default function SettingsModal({
               setExportProgress((prev) => ({
                 ...prev,
                 isWaiting: true,
-                statusText: `Server busy (${res.status}). Waiting ${delaySec}s before retrying...`,
+                statusText: m.serverBusy(res.status, delaySec),
               }));
               await new Promise((r) => setTimeout(r, delaySec * 1000));
               delaySec *= 2;
@@ -212,7 +273,7 @@ export default function SettingsModal({
             }
 
             if (!res.ok) {
-              throw new Error(`Server returned ${res.status}`);
+              throw new Error(`server-${res.status}`);
             }
 
             const data = await res.json();
@@ -228,7 +289,9 @@ export default function SettingsModal({
             setExportProgress((prev) => ({
               ...prev,
               isWaiting: true,
-              statusText: `Network glitch. Retrying note in ${delaySec}s...`,
+              statusText: errMsg.startsWith("server-")
+                ? m.serverError(Number(errMsg.slice("server-".length)))
+                : m.networkRetry(delaySec),
             }));
             await new Promise((r) => setTimeout(r, delaySec * 1000));
             delaySec *= 2;
@@ -251,14 +314,14 @@ export default function SettingsModal({
 
         for (const { note, noteData } of results) {
           if (noteData) {
-            const folderName = note.folderId ? folderMap.get(note.folderId) || "Unfiled" : null;
+            const folderName = note.folderId ? folderMap.get(note.folderId) || m.unfiled : null;
             const fileName = `${note.title.replace(/[\/\\?%*:|"<>]/g, "-") || "untitled"}.md`;
             if (folderName) {
               zip.folder(folderName)?.file(fileName, noteData.content || "");
             } else {
               zip.file(fileName, noteData.content || "");
             }
-          }
+          } else failedCount++;
         }
 
         setExportProgress((prev) => ({
@@ -274,7 +337,7 @@ export default function SettingsModal({
       if (cancelExportRef.current) {
         setExportProgress((prev) => ({
           ...prev,
-          statusText: "Export cancelled.",
+          statusText: m.exportCancelled,
           isWaiting: false,
         }));
         return;
@@ -282,7 +345,7 @@ export default function SettingsModal({
 
       setExportProgress((prev) => ({
         ...prev,
-        statusText: "Packaging .zip archive...",
+        statusText: m.packaging,
         isWaiting: false,
       }));
 
@@ -290,15 +353,17 @@ export default function SettingsModal({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `nota-vault-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = `nota-notes-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      if (failedCount > 0) setExportNotice(lang === "th" ? `ส่งออกไม่ครบ ${failedCount} โน้ต ตรวจสอบการเชื่อมต่อแล้วลองส่งออกอีกครั้ง` : `Could not export ${failedCount} note${failedCount === 1 ? "" : "s"}. Check your connection and export again.`);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg !== "EXPORT_CANCELLED") {
         console.error("Vault export failed:", err);
+        setExportNotice(errMsg === "export-index" ? m.exportIndexError : m.exportError);
       }
     } finally {
       setIsExporting(false);
@@ -312,7 +377,7 @@ export default function SettingsModal({
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== user.email) {
-      setDeleteError("Please type your exact email to confirm.");
+      setDeleteError(m.confirmEmail);
       return;
     }
 
@@ -320,16 +385,12 @@ export default function SettingsModal({
     setDeleteError("");
     try {
       const res = await fetch("/api/auth/delete-account", { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to delete account");
-      }
+      if (!res.ok) throw new Error("account-delete");
       if (onAccountDeleted) {
         onAccountDeleted();
       }
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : "Failed to delete account";
-      setDeleteError(errMsg);
+    } catch {
+      setDeleteError(m.accountDeleteError);
       setIsDeletingAccount(false);
     }
   };
@@ -441,17 +502,19 @@ export default function SettingsModal({
     2
   );
 
-  const activeConfigText =
-    activeConfigTab === "oauth"
-      ? oauthConfig
-      : activeConfigTab === "claude"
-      ? claudeConfig
-      : cursorConfig;
+  const manualConfigText = manualConfigTab === "claude" ? claudeConfig : cursorConfig;
+  const cursorInstallUrl = createCursorInstallUrl(mcpServerUrl);
+  const isLocalMcpUrl = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(mcpServerUrl).hostname);
 
-  const handleCopy = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedConfig(type);
-    setTimeout(() => setCopiedConfig(null), 2000);
+  const handleCopy = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyError(null);
+      setCopiedConfig(type);
+      setTimeout(() => setCopiedConfig(current => current === type ? null : current), 2000);
+    } catch {
+      setCopyError(type);
+    }
   };
 
   return (
@@ -477,7 +540,7 @@ export default function SettingsModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close settings"
+            aria-label={t.closeBtn}
             className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -577,7 +640,7 @@ export default function SettingsModal({
 
                 <div className="bg-neutral-950/40 border border-neutral-800 rounded-xl p-4 flex items-center justify-between">
                   <span className="text-sm font-medium text-neutral-300">
-                    Interface Language
+                    {t.interfaceLanguage}
                   </span>
                   <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-700 p-1 rounded-lg">
                     <button
@@ -721,7 +784,7 @@ export default function SettingsModal({
                     {t.profileInfoTitle}
                   </h3>
                   <p className="text-sm text-neutral-400 leading-relaxed">
-                    Account profile credentials and active session
+                    {t.accountSessionDescription}
                   </p>
                 </div>
 
@@ -733,7 +796,7 @@ export default function SettingsModal({
                         {t.nameLabel}
                       </span>
                       <span className="text-sm font-semibold text-neutral-200">
-                        {user.name || "Default User"}
+                        {user.name || t.unnamedUser}
                       </span>
                     </div>
                     <div>
@@ -820,7 +883,7 @@ export default function SettingsModal({
                           className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition-colors disabled:opacity-40 disabled:hover:bg-rose-600 flex items-center gap-1.5 shrink-0 cursor-pointer"
                         >
                           {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          <span>{isDeletingAccount ? t.saving : t.confirmDeleteBtn}</span>
+                          <span>{isDeletingAccount ? m.deletingAccount : t.confirmDeleteBtn}</span>
                         </button>
                         <button
                           type="button"
@@ -835,7 +898,7 @@ export default function SettingsModal({
                         </button>
                       </div>
                       {deleteError && (
-                        <p className="text-xs text-rose-400 font-mono">
+                        <p role="alert" className="text-xs text-rose-400">
                           {deleteError}
                         </p>
                       )}
@@ -852,7 +915,7 @@ export default function SettingsModal({
                     {t.tabVault}
                   </h3>
                   <p className="text-sm text-neutral-400 leading-relaxed">
-                    Overview of your stored markdown documents and export tools
+                    {t.storedNotesDescription}
                   </p>
                 </div>
 
@@ -912,8 +975,8 @@ export default function SettingsModal({
                   {isExporting && (
                     <div className="pt-3 border-t border-neutral-800 space-y-2">
                       <div className="flex items-center justify-between text-xs font-mono">
-                        <span className="text-neutral-300">
-                          {exportProgress.statusText || "Processing queue..."}
+                        <span role="status" aria-live="polite" className="text-neutral-300">
+                          {exportProgress.statusText || m.processingQueue}
                         </span>
                         <span className="text-neutral-400">
                           {exportProgress.completed} / {exportProgress.total} (
@@ -937,199 +1000,147 @@ export default function SettingsModal({
                       </div>
                     </div>
                   )}
+
+                  {exportNotice && <p role="alert" className="text-xs text-rose-300">{exportNotice}</p>}
                 </div>
               </div>
             )}
 
             {activeTab === "mcp" && (
               <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h3 className="text-base font-semibold text-neutral-100 mb-1">
-                    Model Context Protocol (MCP)
-                  </h3>
-                  <p className="text-sm text-neutral-400 leading-relaxed">
-                    ใช้ key ส่วนตัวสำหรับ stdio หรือ Streamable HTTP; key หมดอายุใน 90 วันและเพิกถอนได้ทันที
-                  </p>
-                </div>
+                <h3 className="text-base font-semibold text-neutral-100">MCP</h3>
 
-                {/* Status Header */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-neutral-950/40 border border-neutral-800">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50" />
-                    <span className="text-sm font-semibold text-neutral-200">
-                      MCP Transport: <span className="text-neutral-300 font-medium">OAuth 2.0 PKCE / Streamable HTTP</span>
-                    </span>
-                  </div>
-                  <span className="text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-750 px-2.5 py-1 rounded-md">
-                    10 MCP Tools
-                  </span>
-                </div>
-
-                {/* 1-Click OAuth Connect Card */}
-                <div className="p-5 rounded-xl bg-gradient-to-b from-indigo-950/30 to-neutral-950/40 border border-indigo-800/40 space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2.5">
-                      <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-neutral-100">
-                            1-Click OAuth Connect
-                          </h4>
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                            Recommended
-                          </span>
-                        </div>
-                        <p className="text-xs text-neutral-400 mt-0.5">
-                          เชื่อมต่อ AI Client ทันทีด้วย OAuth 2.0 PKCE ปลอดภัย ไม่ต้องก๊อปปี้ API Key
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-neutral-300 flex items-center justify-between">
-                      <span>MCP Server URL</span>
-                      <span className="text-neutral-500 font-mono text-[11px]">Streamable HTTP + RFC 8414 Discovery</span>
-                    </label>
-                    <div className="flex items-center gap-2 p-2 bg-neutral-900 border border-neutral-750 rounded-lg">
-                      <span className="font-mono text-xs text-neutral-200 truncate flex-1 select-all px-1">
-                        {mcpServerUrl}
+                <section className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">{m.connectApp}</h4>
+                    {mcpProvider === "cursor" && (
+                      <span role="status" className={`text-xs ${mcpReadiness === "ready" ? "text-emerald-400" : "text-neutral-400"}`}>
+                        {mcpReadiness === "checking" ? m.checking : mcpReadiness === "ready" ? m.readyCursor : m.cursorUnavailable}
                       </span>
+                    )}
+                  </div>
+
+                  <div role="group" aria-label={m.chooseApp} className="flex flex-wrap gap-1 border-b border-neutral-800 pb-3">
+                    {(["cursor", "claude", "chatgpt"] as const).map(provider => (
                       <button
+                        key={provider}
                         type="button"
-                        onClick={() => handleCopy(mcpServerUrl, "mcp-url")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium transition-colors shrink-0 cursor-pointer shadow-xs"
+                        aria-pressed={mcpProvider === provider}
+                        onClick={() => { setMcpProvider(provider); setCopyError(null); }}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mcpProvider === provider ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"}`}
                       >
-                        {copiedConfig === "mcp-url" ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Copied!</span>
-                          </>
+                        {provider === "chatgpt" ? "ChatGPT" : provider === "claude" ? "Claude" : "Cursor"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-xs text-neutral-400 leading-relaxed">
+                      {mcpProvider === "cursor"
+                        ? m.cursorInstructions
+                        : mcpProvider === "claude"
+                        ? m.claudeInstructions
+                        : m.chatgptInstructions}
+                    </p>
+
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400 mb-1.5">{m.mcpUrl}</div>
+                      <code className="block w-full overflow-x-auto whitespace-nowrap rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-200 select-all">
+                        {mcpServerUrl}
+                      </code>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {mcpProvider === "cursor" && (
+                        mcpReadiness === "ready" ? (
+                          <a href={cursorInstallUrl} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors">
+                            {m.addToCursor} <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
                         ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copy Server URL</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-neutral-400 pt-1">
-                    <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-lg p-3 space-y-1">
-                      <div className="font-semibold text-neutral-200">Cursor IDE</div>
-                      <p className="text-[11px] leading-relaxed">
-                        Settings &gt; Features &gt; MCP &gt; Add Server &gt; Type: HTTP / SSE &gt; Paste URL ด้านบน แล้วกด Connect
-                      </p>
-                    </div>
-                    <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-lg p-3 space-y-1">
-                      <div className="font-semibold text-neutral-200">Claude Desktop / ChatGPT</div>
-                      <p className="text-[11px] leading-relaxed">
-                        ใส่ URL ใน config แล้วเปิด Claude จะมีหน้าต่างเบราว์เซอร์เด้งขึ้นมาให้กดยืนยัน (Authorize) เพียง 1 คลิก
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Configuration Snippets */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800">
-                      <button
-                        type="button"
-                        onClick={() => setActiveConfigTab("oauth")}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                          activeConfigTab === "oauth"
-                            ? "bg-neutral-800 text-white font-semibold"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        OAuth (1-Click)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveConfigTab("cursor")}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                          activeConfigTab === "cursor"
-                            ? "bg-neutral-800 text-white font-semibold"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        Cursor (Bearer Key)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveConfigTab("claude")}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                          activeConfigTab === "claude"
-                            ? "bg-neutral-800 text-white font-semibold"
-                            : "text-neutral-400 hover:text-neutral-200"
-                        }`}
-                      >
-                        Claude (stdio)
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(activeConfigText, activeConfigTab)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-neutral-700"
-                    >
-                      {copiedConfig === activeConfigTab ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy Config</span>
-                        </>
+                          <button type="button" disabled className="px-3 py-2 rounded-md bg-neutral-800 text-neutral-500 text-xs font-medium cursor-not-allowed">
+                            {m.addToCursor}
+                          </button>
+                        )
                       )}
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopy(mcpServerUrl, "mcp-url")}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-100 text-xs font-medium transition-colors"
+                      >
+                        {copiedConfig === "mcp-url" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedConfig === "mcp-url" ? m.copied : m.copyUrl}
+                      </button>
+                    </div>
 
-                  <pre className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 font-mono text-xs text-neutral-300 overflow-x-auto leading-relaxed">
-                    {activeConfigText}
-                  </pre>
-                  <p className="text-xs text-neutral-400 font-mono">
-                    {activeConfigTab === "oauth"
-                      ? "ไม่ต้องระบุ Token ใน Config เพราะระบบจะทำ PKCE OAuth Handshake และขอ Token อัตโนมัติ"
-                      : activeConfigTab === "cursor"
-                      ? "โหมด HTTPS Bearer Key แนะนำให้สร้าง Key ด้านล่างแล้วนำมาใส่ใน Config"
-                      : "โหมด stdio สำหรับรันแบบ Local Node.js script"}
-                  </p>
-                </div>
+                    {mcpProvider === "cursor" && mcpReadiness === "unavailable" && (
+                      <p className="text-xs text-amber-300">{m.cursorNotReady}</p>
+                    )}
+                    {mcpProvider !== "cursor" && isLocalMcpUrl && (
+                      <p className="text-xs text-amber-300">{m.remoteUrlRequired}</p>
+                    )}
+                    {(copyError === "mcp-url" || copyError === "oauth-config") && <p role="alert" className="text-xs text-red-300">{m.copyFailed}</p>}
+                    <p className="text-xs text-neutral-400 leading-relaxed">
+                      {mcpProvider === "cursor" ? (
+                        <>{m.cursorSetupNote} <button type="button" onClick={() => void handleCopy(oauthConfig, "oauth-config")} className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{copiedConfig === "oauth-config" ? m.copiedJson : m.copyJson}</button></>
+                      ) : mcpProvider === "claude" ? (
+                        <>{m.claudeWorkspaceNote} · <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{m.claudeGuide}</a></>
+                      ) : (
+                        <>{m.chatgptAvailabilityNote} · <a href="https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{m.chatgptGuide}</a></>
+                      )}
+                    </p>
+                  </div>
+                </section>
 
                 {/* Manual Key Management */}
-                <div className="p-5 rounded-xl bg-neutral-950/40 border border-neutral-800 space-y-3">
+                <div className="border-t border-neutral-800 pt-5 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2.5">
                       <Key className="w-4 h-4 text-neutral-400" />
-                      <span className="text-sm font-semibold text-neutral-200">
-                        Manual API Key Management (Fallback)
-                      </span>
+                      <span className="text-sm font-semibold text-neutral-200">{m.manualKeys}</span>
                     </div>
                     <button
                       type="button"
                       onClick={handleGenerateApiKey}
                       disabled={isGeneratingKey}
-                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 border border-neutral-700"
+                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 border border-neutral-700 shrink-0"
                     >
                       {isGeneratingKey ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Generating...</span>
+                          <span>{m.creatingKey}</span>
                         </>
-                      ) : "Generate Key"}
+                      ) : m.createKey}
                     </button>
                   </div>
 
                   <p className="text-xs text-neutral-400 leading-relaxed">
-                    ใช้เฉพาะเมื่อต้องการต่อแบบ manual ผ่าน Stdio หรือ Script ส่วนตัว คัดลอก key ทันทีหลังจากสร้าง
+                    {m.manualKeyDescription}
                   </p>
 
+                  <details className="border-t border-neutral-800 pt-3">
+                    <summary className="cursor-pointer text-xs text-neutral-300">{m.manualConfig}</summary>
+                    <div className="space-y-2 pt-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex gap-1">
+                          {(["cursor", "claude"] as const).map(configTab => (
+                            <button key={configTab} type="button" onClick={() => setManualConfigTab(configTab)} aria-pressed={manualConfigTab === configTab} className={`rounded px-2 py-1 text-xs ${manualConfigTab === configTab ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-white"}`}>
+                              {configTab === "cursor" ? m.cursorHttp : m.claudeStdio}
+                            </button>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => void handleCopy(manualConfigText, "manual-config")} className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white">
+                          {copiedConfig === "manual-config" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copiedConfig === "manual-config" ? m.copiedConfig : m.copyConfig}
+                        </button>
+                      </div>
+                      <pre className="overflow-x-auto rounded-md border border-neutral-800 bg-neutral-900 p-3 font-mono text-xs text-neutral-300">{manualConfigText}</pre>
+                    </div>
+                  </details>
+
+                  {(copyError === "manual-config" || copyError === "mcp-key") && <p role="alert" className="text-xs text-red-300">{m.copyFailed}</p>}
+
                   {keyError && <p role="alert" className="text-xs text-red-300">{keyError}</p>}
+                  {credentialsError && <p role="alert" className="text-xs text-red-300">{credentialsError}</p>}
                   {apiKey && (
                     <div className="flex items-center gap-3 p-2.5 bg-neutral-900 border border-neutral-800 rounded-lg">
                       <span className="font-mono text-xs text-neutral-200 truncate flex-1 select-all">
@@ -1140,14 +1151,14 @@ export default function SettingsModal({
                         onClick={() => handleCopy(apiKey, "mcp-key")}
                         className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-750 text-neutral-200 rounded text-xs font-mono transition-colors shrink-0 cursor-pointer"
                       >
-                        {copiedConfig === "mcp-key" ? "Copied!" : "Copy Key"}
+                        {copiedConfig === "mcp-key" ? m.copiedKey : m.copyKey}
                       </button>
                     </div>
                   )}
                   {credentials.filter(item => !item.revokedAt).map(item => (
                     <div key={item.id} className="flex items-center justify-between text-xs text-neutral-400">
-                      <span>Created {new Date(item.createdAt).toLocaleDateString()} · Expires {new Date(item.expiresAt).toLocaleDateString()}</span>
-                      <button type="button" onClick={() => handleRevokeKey(item.id)} className="text-red-300 hover:text-red-200">Revoke</button>
+                      <span>{m.createdExpires(new Date(item.createdAt).toLocaleDateString(lang === "th" ? "th-TH" : "en-US"), new Date(item.expiresAt).toLocaleDateString(lang === "th" ? "th-TH" : "en-US"))}</span>
+                      <button type="button" onClick={() => handleRevokeKey(item.id)} className="text-red-300 hover:text-red-200">{m.revoke}</button>
                     </div>
                   ))}
                 </div>
@@ -1155,7 +1166,7 @@ export default function SettingsModal({
                 {/* Tools Listing Table */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                    Registered Protocol Tools
+                    {lang === "th" ? "เครื่องมือ MCP" : "MCP tools"}
                   </h4>
 
                   <div className="border border-neutral-800 rounded-xl overflow-hidden divide-y divide-neutral-800 bg-neutral-950/40">
@@ -1169,7 +1180,7 @@ export default function SettingsModal({
                             {tool.name}
                           </code>
                           <span className="text-neutral-400 text-xs truncate max-w-md hidden sm:inline">
-                            {tool.desc}
+                            {tool.desc[lang]}
                           </span>
                         </div>
 
@@ -1182,7 +1193,7 @@ export default function SettingsModal({
                               : "bg-neutral-800 text-neutral-300 border-neutral-700"
                           }`}
                         >
-                          {tool.category}
+                          {lang === "th" ? ({ Read: "อ่าน", Write: "เขียน", Share: "แชร์", Maintenance: "ดูแลระบบ" }[tool.category]) : tool.category}
                         </span>
                       </div>
                     ))}

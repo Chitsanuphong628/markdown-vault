@@ -7,9 +7,12 @@ export interface FlowNode {
   id: string;
   label: string;
   shape: "rect" | "round" | "diamond" | "database";
+  tone?: FlowNodeTone;
   /** Optional custom outgoing connections (e.g. Yes/No branches from a decision) */
   branches?: Array<{ targetId: string; label?: string }>;
 }
+
+export type FlowNodeTone = "start" | "process" | "decision" | "data" | "success" | "warning" | "danger";
 
 export interface FlowchartOptions {
   title?: string;
@@ -50,12 +53,14 @@ export interface PieOptions {
 
 export interface MindmapBranch {
   label: string;
+  purpose?: string;
   subBranches?: string[];
 }
 
 export interface MindmapOptions {
   root: string;
   branches: MindmapBranch[];
+  purposeLabel?: string;
 }
 
 export interface StateTransition {
@@ -117,23 +122,78 @@ export function generateFlowchart(options: FlowchartOptions): string {
   const siblingOutcomes = nodes.map(node => new Set(
     (node.branches || []).map(branch => branch.targetId).filter(id => nodeIds.has(id)),
   ));
+  const links: Array<{ from: string; to: string; label?: string }> = [];
   for (let index = 0; index < nodes.length; index++) {
     const node = nodes[index];
     const branches = (node.branches || []).filter(branch => nodeIds.has(branch.targetId));
     if (branches.length) {
       for (const branch of branches) {
-        const edgeLabel = branch.label ? `|"${sanitizeLabel(branch.label)}"|` : "";
-        lines.push(`    ${node.id} -->${edgeLabel} ${branch.targetId}`);
+        links.push({ from: node.id, to: branch.targetId, label: branch.label });
       }
       continue;
     }
     const next = nodes[index + 1];
     if (next && !siblingOutcomes.some(group => group.has(node.id) && group.has(next.id))) {
-      lines.push(`    ${node.id} --> ${next.id}`);
+      links.push({ from: node.id, to: next.id });
     }
   }
 
+  for (const link of links) {
+    const edgeLabel = link.label ? `|"${sanitizeLabel(link.label)}"|` : "";
+    lines.push(`    ${link.from} -->${edgeLabel} ${link.to}`);
+  }
+
+  for (const definition of FLOWCHART_CLASS_DEFINITIONS) lines.push(`    ${definition}`);
+  for (const node of nodes) {
+    const tone = node.tone || toneForShape(node.shape);
+    lines.push(`    class ${node.id} flow${capitalize(tone)}`);
+  }
+  links.forEach((link, index) => {
+    const tone = toneForBranchLabel(link.label);
+    if (tone) {
+      const color = FLOW_NODE_STYLES[tone].stroke;
+      lines.push(`    linkStyle ${index} stroke:${color},color:${color},stroke-width:2px;`);
+    }
+  });
+
   return lines.join("\n");
+}
+
+const FLOW_NODE_STYLES: Record<FlowNodeTone, { fill: string; stroke: string; text: string }> = {
+  start: { fill: "#12352f", stroke: "#2dd4bf", text: "#f0fdfa" },
+  process: { fill: "#172b44", stroke: "#60a5fa", text: "#eff6ff" },
+  decision: { fill: "#3a2c14", stroke: "#fbbf24", text: "#fffbeb" },
+  data: { fill: "#282144", stroke: "#a78bfa", text: "#f5f3ff" },
+  success: { fill: "#12352f", stroke: "#34d399", text: "#ecfdf5" },
+  warning: { fill: "#3a2c14", stroke: "#fbbf24", text: "#fffbeb" },
+  danger: { fill: "#3d1e2a", stroke: "#fb7185", text: "#fff1f2" },
+};
+
+export const FLOWCHART_CLASS_DEFINITIONS = Object.entries(FLOW_NODE_STYLES).map(([tone, style]) =>
+  `classDef flow${capitalize(tone)} fill:${style.fill},stroke:${style.stroke},stroke-width:2px,color:${style.text};`,
+);
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function toneForShape(shape: FlowNode["shape"]): FlowNodeTone {
+  if (shape === "round") return "start";
+  if (shape === "diamond") return "decision";
+  if (shape === "database") return "data";
+  return "process";
+}
+
+function toneForBranchLabel(label = ""): "success" | "danger" | undefined {
+  const value = label.trim();
+  const englishToken = (words: string) => new RegExp(`(?:^|[^\\p{L}\\p{N}])(?:${words})(?:$|[^\\p{L}\\p{N}])`, "iu");
+  if (/(ไม่|ปฏิเสธ|ผิด)/u.test(value) || englishToken("no|not|fail(?:ed|ure)?|invalid|reject(?:ed)?|error").test(value)) {
+    return "danger";
+  }
+  if (/(ใช่|ถูก|ผ่าน|สำเร็จ)/u.test(value) || englishToken("yes|valid|pass(?:ed)?|success|approved").test(value)) {
+    return "success";
+  }
+  return undefined;
 }
 
 /** Generate Sequence Diagram */
@@ -224,24 +284,36 @@ export function generatePieChart(options: PieOptions): string {
 /** Generate Mindmap */
 export function generateMindmap(options: MindmapOptions): string {
   const { root, branches } = options;
+  const purposeLabel = sanitizeMindmapText(options.purposeLabel || "ทำเพื่อ") || "ทำเพื่อ";
   const cleanRoot = sanitizeLabel(root) || "Concept";
 
   const lines: string[] = ["mindmap", `  root(("${cleanRoot}"))`];
 
-  for (const b of branches) {
-    const bLabel = sanitizeLabel(b.label) || "Topic";
-    lines.push(`    ["${bLabel}"]`);
+  for (const [branchIndex, b] of branches.entries()) {
+    const branchId = `branch${branchIndex}`;
+    const bLabel = sanitizeMindmapText(b.label) || "Topic";
+    const purpose = sanitizeMindmapText(b.purpose || "");
+    const branchText = purpose
+      ? `**${bLabel}**\n*${purposeLabel} · ${purpose}*`
+      : `**${bLabel}**`;
+    lines.push(`    ${branchId}["\`${branchText}\`"]`);
+    lines.push("    :::main-branch");
     if (b.subBranches && b.subBranches.length > 0) {
-      for (const sub of b.subBranches) {
-        const subLabel = sanitizeLabel(sub);
+      for (const [subIndex, sub] of b.subBranches.entries()) {
+        const subLabel = sanitizeMindmapText(sub);
         if (subLabel) {
-          lines.push(`      ("${subLabel}")`);
+          lines.push(`      sub${branchIndex}_${subIndex}("${subLabel}")`);
+          lines.push("      :::leaf");
         }
       }
     }
   }
 
   return lines.join("\n");
+}
+
+function sanitizeMindmapText(text: string): string {
+  return sanitizeLabel(text).replace(/[\\`*_]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /** Generate State Diagram */
@@ -277,5 +349,48 @@ export function attachThemeDirective(chartCode: string, paletteKey: string): str
 
   const directive = `%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '${palette.primary}', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '${palette.primary}', 'lineColor': '${palette.primary}', 'secondaryColor': '${palette.primary}'}}}%%`;
 
+  return `${directive}\n${chartCode}`;
+}
+
+const MINDMAP_COLORS = ["#2563eb", "#0f766e", "#b45309", "#6d28d9"];
+export const MERMAID_EXPORT_BACKGROUND = "#161922";
+
+export function addSvgBackground(svgMarkup: string, color = MERMAID_EXPORT_BACKGROUND): string {
+  if (!/^#[\da-f]{6}$/iu.test(color)) return svgMarkup;
+  const openingTag = /<svg\b[^>]*>/iu.exec(svgMarkup);
+  if (!openingTag) return svgMarkup;
+
+  const viewBox = /\bviewBox=["']([^"']+)["']/iu.exec(openingTag[0])?.[1];
+  const dimensions = viewBox?.trim().split(/[\s,]+/u).map(Number);
+  const [x, y, width, height] = dimensions?.length === 4 && dimensions.every(Number.isFinite)
+    ? dimensions
+    : [0, 0, 800, 600];
+  if (width <= 0 || height <= 0) return svgMarkup;
+
+  const background = `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${color}" data-mermaid-background="true"/>`;
+  const insertAt = openingTag.index + openingTag[0].length;
+  return `${svgMarkup.slice(0, insertAt)}${background}${svgMarkup.slice(insertAt)}`;
+}
+
+const MINDMAP_THEME_CSS = [
+  ".mindmap-node.section-root circle,.mindmap-node.section-root rect,.mindmap-node.section-root path{fill:#24234b;stroke:#818cf8;stroke-width:3px}",
+  ".mindmap-node.main-branch rect,.mindmap-node.main-branch path,.mindmap-node.main-branch circle,.mindmap-node.main-branch polygon{stroke-width:2px}",
+  ".mindmap-node.leaf rect,.mindmap-node.leaf path,.mindmap-node.leaf circle,.mindmap-node.leaf polygon{fill:#151a26;stroke:#354052;stroke-width:1.5px}",
+  ".mindmap-node.leaf text,.mindmap-node.leaf span{fill:#dbe4f0;color:#dbe4f0}",
+  "path.edge-depth-1{stroke-width:2.5px!important}",
+  "path.edge-depth-2,path.edge-depth-3,path.edge-depth-4,path.edge-depth-5,path.edge-depth-6,path.edge-depth-7,path.edge-depth-8{stroke-width:1.5px!important}",
+].join(" ");
+
+export function attachMindmapThemeDirective(chartCode: string): string {
+  const colorVariables = Array.from({ length: 12 }, (_, index) => {
+    const color = MINDMAP_COLORS[index % MINDMAP_COLORS.length];
+    return `'cScale${index}':'${color}','cScaleLabel${index}':'#ffffff','cScaleInv${index}':'${color}'`;
+  }).join(",");
+  const directive = `%%{init: {'theme': 'base','look':'neo','darkMode':true,'themeVariables': {'background':'${MERMAID_EXPORT_BACKGROUND}','mainBkg':'#151a26','primaryColor':'#24234b','primaryTextColor':'#f3f4f6','textColor':'#f3f4f6','nodeBorder':'#475569',${colorVariables}},'themeCSS':'${MINDMAP_THEME_CSS}','mindmap':{'padding':24,'maxNodeWidth':240}}}%%`;
+  return `${directive}\n${chartCode}`;
+}
+
+export function attachFlowchartThemeDirective(chartCode: string): string {
+  const directive = `%%{init: {'theme':'base','flowchart':{'curve':'basis'},'themeVariables':{'background':'${MERMAID_EXPORT_BACKGROUND}','mainBkg':'#172b44','primaryColor':'#172b44','primaryTextColor':'#f3f4f6','lineColor':'#64748b','nodeBorder':'#60a5fa','textColor':'#f3f4f6'}}}%%`;
   return `${directive}\n${chartCode}`;
 }

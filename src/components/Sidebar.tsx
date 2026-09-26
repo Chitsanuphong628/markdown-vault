@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { Language, I18N_MAIN } from "@/lib/i18n";
-import { NoteColorKey, NOTE_THEMES } from "@/lib/noteTheme";
+import { NoteColorKey } from "@/lib/noteTheme";
 import { getShortcuts, formatComboDisplay } from "@/lib/shortcuts";
 
 export interface FolderItem {
@@ -35,6 +35,7 @@ export interface NoteItem {
   updatedAt: string;
   revision: number;
   color?: NoteColorKey;
+  excerpt?: string;
 }
 
 interface SidebarProps {
@@ -264,14 +265,14 @@ function Sidebar({
       {isOpenMobile && (
         <div
           onClick={onCloseMobile}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden animate-in fade-in duration-200"
         />
       )}
 
       <aside
         className={`w-72 bg-neutral-900/95 border-r border-neutral-800/80 flex flex-col h-full select-none shrink-0 shadow-2xl backdrop-blur-md transition-transform duration-300 ease-in-out
-          fixed inset-y-0 left-0 z-50 md:relative md:z-20 md:translate-x-0
-          ${isOpenMobile ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+          fixed inset-y-0 left-0 z-50 lg:relative lg:z-20 lg:translate-x-0
+          ${isOpenMobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         {/* App Branding & User Profile */}
         <div className="p-3.5 border-b border-neutral-800/80 flex items-center justify-between">
@@ -310,7 +311,7 @@ function Sidebar({
             {onCloseMobile && (
               <button
                 onClick={onCloseMobile}
-                className="md:hidden p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer ml-1"
+                className="lg:hidden p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 rounded-lg transition-colors cursor-pointer ml-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -325,7 +326,7 @@ function Sidebar({
             <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2" />
             <input
               type="text"
-              placeholder={lang === "th" ? "ค้นหาโน้ตหรือเนื้อหา..." : "Search notes or content..."}
+              placeholder={t.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg pl-7 pr-12 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/20 transition-all"
@@ -486,7 +487,7 @@ function Sidebar({
                     </div>
                   ) : (
                     <span
-                      title="Double-click to rename"
+                      title={t.renameNoteHint}
                       onDoubleClick={(e) => handleStartRename(folder.id, "folder", folder.name, e)}
                       className="truncate flex-1 select-none"
                     >
@@ -524,7 +525,6 @@ function Sidebar({
                     </div>
                   ) : (
                     folderNotes.map((note) => {
-                      const theme = note.color && note.color !== "default" ? NOTE_THEMES[note.color] : null;
                       return (
                         <div
                           key={note.id}
@@ -540,11 +540,7 @@ function Sidebar({
                           }`}
                         >
                           <div className="flex items-center gap-1.5 truncate flex-1 min-w-0 mr-2">
-                            {theme ? (
-                              <span className={`w-2 h-2 rounded-full shrink-0 ${theme.dotColor}`} />
-                            ) : (
-                              <FileText className="w-3 h-3 shrink-0" />
-                            )}
+                            <FileText className="w-3 h-3 shrink-0" />
                           {renamingId === note.id && renamingType === "note" ? (
                             <div
                               className="flex-1 flex items-center min-w-0"
@@ -564,12 +560,9 @@ function Sidebar({
                               />
                             </div>
                           ) : (
-                            <span
-                              title="Double-click to rename"
-                              onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)}
-                              className="truncate flex-1 select-none"
-                            >
-                              {note.title}
+                            <span title={t.renameNoteHint} onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)} className="flex min-w-0 flex-1 select-none flex-col">
+                              <span className="truncate">{note.title}</span>
+                              {searchQuery.trim() && note.excerpt && <span className="truncate text-[10px] font-normal text-neutral-500">{note.excerpt}</span>}
                             </span>
                           )}
                         </div>
@@ -607,7 +600,6 @@ function Sidebar({
               <span className="text-[9px] text-neutral-600 font-normal">{t.canDragHint}</span>
             </div>
             {rootNotes.map((note) => {
-              const theme = note.color && note.color !== "default" ? NOTE_THEMES[note.color] : null;
               return (
                 <div
                   key={note.id}
@@ -623,11 +615,7 @@ function Sidebar({
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate flex-1 min-w-0 mr-2">
-                    {theme ? (
-                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${theme.dotColor}`} />
-                    ) : (
-                      <FileText className="w-3.5 h-3.5 shrink-0" />
-                    )}
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
                   {renamingId === note.id && renamingType === "note" ? (
                     <div
                       className="flex-1 flex items-center min-w-0"
@@ -647,13 +635,10 @@ function Sidebar({
                       />
                     </div>
                   ) : (
-                    <span
-                      title="Double-click to rename"
-                      onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)}
-                      className="truncate flex-1 select-none"
-                    >
-                      {note.title}
-                    </span>
+                  <span title={t.renameNoteHint} onDoubleClick={(e) => handleStartRename(note.id, "note", note.title, e)} className="flex min-w-0 flex-1 select-none flex-col">
+                    <span className="truncate">{note.title}</span>
+                    {searchQuery.trim() && note.excerpt && <span className="truncate text-[10px] font-normal text-neutral-500">{note.excerpt}</span>}
+                  </span>
                   )}
                 </div>
                 <button
@@ -680,7 +665,7 @@ function Sidebar({
             disabled={isLoadingMoreNotes}
             className="w-full mt-2 rounded-lg border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-[11px] text-neutral-400 hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-wait disabled:opacity-60 transition-colors"
           >
-            {isLoadingMoreNotes ? "กำลังโหลด..." : "โหลดโน้ตเพิ่มเติม"}
+            {isLoadingMoreNotes ? t.loadingMoreNotes : t.loadMoreNotes}
           </button>
         )}
       </div>
