@@ -6,7 +6,6 @@ import { escapePostgrestSearch, rejectCrossOrigin } from "@/lib/security";
 import { z } from "zod";
 import { isNoteColorKey, parseNoteTheme } from "@/lib/noteTheme";
 import { buildNoteSearchExcerpt } from "@/lib/noteSearch";
-import { isMissingSortOrderColumn } from "@/lib/sidebarOrdering";
 
 const noteSchema = z.object({
   title: z.string().trim().min(1).max(240),
@@ -29,35 +28,33 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Invalid query" }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
-  const fetchNotes = (includeSortOrder: boolean) => {
-    let query = supabase
-      .from("Note")
-      .select(q
-        ? `id, title, content, themeColor, folderId, createdAt, updatedAt, revision${includeSortOrder ? ", sortOrder" : ""}`
-        : `id, title, themeColor, folderId, createdAt, updatedAt, revision${includeSortOrder ? ", sortOrder" : ""}`)
-      .eq("userId", user.id);
+  let query = getSupabaseAdmin()
+    .from("Note")
+    .select(q
+      ? "id, title, content, themeColor, folderId, createdAt, updatedAt, revision, sortOrder"
+      : "id, title, themeColor, folderId, createdAt, updatedAt, revision, sortOrder")
+    .eq("userId", user.id);
 
-    if (q) {
-      query = query.order("updatedAt", { ascending: false });
-    } else {
-      // Sort within folder groups first; the sidebar renders each folder separately.
-      query = query.order("folderId", { ascending: true, nullsFirst: true });
-      if (includeSortOrder) query = query.order("sortOrder", { ascending: true });
-      query = query.order("updatedAt", { ascending: false });
-    }
+  if (q) {
+    query = query.order("updatedAt", { ascending: false });
+  } else {
+    // Sort within folder groups first; the sidebar renders each folder separately.
+    query = query
+      .order("folderId", { ascending: true, nullsFirst: true })
+      .order("sortOrder", { ascending: true })
+      .order("updatedAt", { ascending: false });
+  }
 
-    if (folderId) query = query.eq("folderId", folderId);
-    if (q) {
-      const searchTerm = escapePostgrestSearch(q);
-      query = query.or(`title.ilike.%${searchTerm}%,content.ilike.%${searchTerm}%`);
-    }
-    return query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-  };
+  if (folderId) {
+    query = query.eq("folderId", folderId);
+  }
 
-  let result = await fetchNotes(true);
-  if (isMissingSortOrderColumn(result.error)) result = await fetchNotes(false);
-  const { data: notes, error } = result;
+  if (q) {
+    const searchTerm = escapePostgrestSearch(q);
+    query = query.or(`title.ilike.%${searchTerm}%,content.ilike.%${searchTerm}%`);
+  }
+
+  const { data: notes, error } = await query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -69,7 +66,7 @@ export async function GET(req: Request) {
     createdAt: string;
     updatedAt: string;
     revision: number;
-    sortOrder?: number;
+    sortOrder: number;
     content?: string;
   }) => {
     const color = isNoteColorKey(n.themeColor) ? n.themeColor : "default";
@@ -80,7 +77,7 @@ export async function GET(req: Request) {
       createdAt: n.createdAt,
       updatedAt: n.updatedAt,
       revision: n.revision,
-      sortOrder: n.sortOrder ?? 0,
+      sortOrder: n.sortOrder,
       color,
       ...(q ? { excerpt: buildNoteSearchExcerpt(n.content || "", q) } : {}),
     };
@@ -118,7 +115,7 @@ export async function POST(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ note }, { status: 201 });
-  } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create note" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Failed to create note" }, { status: 500 });
   }
 }

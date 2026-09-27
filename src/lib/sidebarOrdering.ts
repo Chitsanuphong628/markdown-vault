@@ -19,14 +19,6 @@ export const sidebarReorderSchema = z.discriminatedUnion("kind", [
 
 export type SidebarReorderInput = z.infer<typeof sidebarReorderSchema>;
 
-export function isMissingSortOrderColumn(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
-  return Boolean(
-    error
-    && (error.code === "42703" || error.code === "PGRST204")
-    && /sortOrder/i.test(error.message ?? "")
-  );
-}
-
 export function beforeIdAtDropPosition<T extends { id: string }>(
   siblings: readonly T[],
   targetId: string,
