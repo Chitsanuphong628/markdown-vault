@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { afterIdForMove, beforeIdAtDropPosition, beforeIdForMove, sidebarReorderSchema } from "../src/lib/sidebarOrdering";
+import { afterIdForMove, beforeIdAtDropPosition, beforeIdForMove, isMissingSortOrderColumn, sidebarReorderSchema } from "../src/lib/sidebarOrdering";
 
 const ids = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
 
@@ -33,4 +33,11 @@ test("after placement stays anchored to the visible sibling, including the loade
   assert.equal(afterIdForMove(siblings, ids[0], ids[2]), ids[2]);
   assert.equal(afterIdForMove(siblings, ids[0], ids[0]), null);
   assert.equal(afterIdForMove(siblings, ids[0], "missing"), null);
+});
+
+test("legacy database fallback only handles missing sortOrder column errors", () => {
+  assert.equal(isMissingSortOrderColumn({ code: "42703", message: 'column "sortOrder" does not exist' }), true);
+  assert.equal(isMissingSortOrderColumn({ code: "PGRST204", message: "Could not find sortOrder in schema cache" }), true);
+  assert.equal(isMissingSortOrderColumn({ code: "42501", message: 'permission denied for "sortOrder"' }), false);
+  assert.equal(isMissingSortOrderColumn({ code: "42703", message: 'column "updatedAt" does not exist' }), false);
 });
