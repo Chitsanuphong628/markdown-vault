@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCursorInstallUrl, isMcpOAuthMetadataReady } from "../src/lib/mcp/connect";
+import { createCursorInstallUrl, isMcpEndpointReady, isMcpOAuthMetadataReady } from "../src/lib/mcp/connect";
 
 test("Cursor install URL contains only the named remote MCP server config", () => {
   const endpoint = "https://nota.example/api/mcp?source=ไทย&mode=1";
@@ -27,4 +27,20 @@ test("direct install requires usable OAuth registration and PKCE metadata", () =
   assert.equal(isMcpOAuthMetadataReady({ ...metadata, registration_endpoint: undefined }), false);
   assert.equal(isMcpOAuthMetadataReady({ ...metadata, code_challenge_methods_supported: [] }), false);
   assert.equal(isMcpOAuthMetadataReady(null), false);
+});
+
+test("one MCP URL is ready only when discovery and the auth challenge match it", () => {
+  const url = "https://nota.example/api/mcp";
+  const authorization = {
+    issuer: "https://nota.example",
+    authorization_endpoint: "https://nota.example/oauth/authorize",
+    token_endpoint: "https://nota.example/api/oauth/token",
+    registration_endpoint: "https://nota.example/api/oauth/register",
+    code_challenge_methods_supported: ["S256"],
+  };
+  const resource = { resource: url, authorization_servers: [authorization.issuer] };
+  assert.equal(isMcpEndpointReady(url, authorization, resource, 401, "Bearer resource_metadata=\"https://nota.example/.well-known/oauth-protected-resource/api/mcp\""), true);
+  assert.equal(isMcpEndpointReady(url, authorization, { ...resource, resource: "https://other.example/api/mcp" }, 401, "Bearer"), false);
+  assert.equal(isMcpEndpointReady(url, authorization, resource, 403, "Bearer"), false);
+  assert.equal(isMcpEndpointReady(url, authorization, resource, 401, null), false);
 });

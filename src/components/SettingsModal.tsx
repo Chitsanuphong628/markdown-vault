@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import JSZip from "jszip";
 import { Language, I18N_MAIN, I18N_MCP } from "@/lib/i18n";
-import { createCursorInstallUrl, isMcpOAuthMetadataReady } from "@/lib/mcp/connect";
+import { createCursorInstallUrl, isMcpEndpointReady } from "@/lib/mcp/connect";
 import {
   DEFAULT_SHORTCUTS,
   ShortcutActionId,
@@ -75,7 +75,6 @@ export default function SettingsModal({
   const t = I18N_MAIN[lang] || I18N_MAIN.en;
   const m = I18N_MCP[lang] || I18N_MCP.en;
   const [activeTab, setActiveTab] = useState<"general" | "shortcuts" | "account" | "data" | "mcp">("general");
-  const [mcpProvider, setMcpProvider] = useState<"cursor" | "claude" | "chatgpt">("cursor");
   const [manualConfigTab, setManualConfigTab] = useState<"cursor" | "claude">("cursor");
   const [mcpReadiness, setMcpReadiness] = useState<"checking" | "ready" | "unavailable">("checking");
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
@@ -174,13 +173,21 @@ export default function SettingsModal({
     });
     const checkReadiness = async () => {
       try {
-        const response = await fetch("/.well-known/oauth-authorization-server", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const metadata: unknown = response.ok ? await response.json() : null;
+        const endpointUrl = `${window.location.origin}/api/mcp`;
+        const options = { cache: "no-store" as const, signal: controller.signal };
+        const [authorizationResponse, resourceResponse, endpointResponse, statusResponse] = await Promise.all([
+          fetch("/.well-known/oauth-authorization-server", options),
+          fetch("/.well-known/oauth-protected-resource/api/mcp", options),
+          fetch("/api/mcp", options),
+          fetch("/api/mcp/status", options),
+        ]);
+        const authorization: unknown = authorizationResponse.ok ? await authorizationResponse.json() : null;
+        const resource: unknown = resourceResponse.ok ? await resourceResponse.json() : null;
         if (!controller.signal.aborted) {
-          setMcpReadiness(response.ok && isMcpOAuthMetadataReady(metadata) ? "ready" : "unavailable");
+          setMcpReadiness(statusResponse.ok && isMcpEndpointReady(
+            endpointUrl, authorization, resource, endpointResponse.status,
+            endpointResponse.headers.get("www-authenticate"),
+          ) ? "ready" : "unavailable");
         }
       } catch {
         if (!controller.signal.aborted) setMcpReadiness("unavailable");
@@ -1012,82 +1019,51 @@ export default function SettingsModal({
 
                 <section className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">{m.connectApp}</h4>
-                    {mcpProvider === "cursor" && (
-                      <span role="status" className={`text-xs ${mcpReadiness === "ready" ? "text-emerald-400" : "text-neutral-400"}`}>
-                        {mcpReadiness === "checking" ? m.checking : mcpReadiness === "ready" ? m.readyCursor : m.cursorUnavailable}
-                      </span>
-                    )}
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">{m.mcpUrl}</h4>
+                    <span role="status" className={`text-xs ${mcpReadiness === "ready" ? "text-emerald-400" : "text-neutral-400"}`}>
+                      {mcpReadiness === "checking" ? m.checking : mcpReadiness === "ready" ? m.endpointReady : m.endpointUnavailable}
+                    </span>
                   </div>
+                  <code className="block w-full overflow-x-auto whitespace-nowrap rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-200 select-all">
+                    {mcpServerUrl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopy(mcpServerUrl, "mcp-url")}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs font-medium text-neutral-100 hover:bg-neutral-700"
+                  >
+                    {copiedConfig === "mcp-url" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedConfig === "mcp-url" ? m.copied : m.copyUrl}
+                  </button>
+                  {mcpReadiness === "unavailable" && <p className="text-xs text-amber-300">{m.endpointNotReady}</p>}
+                  {isLocalMcpUrl && <p className="text-xs text-amber-300">{m.remoteUrlRequired}</p>}
+                  {(copyError === "mcp-url" || copyError === "oauth-config") && <p role="alert" className="text-xs text-red-300">{m.copyFailed}</p>}
 
-                  <div role="group" aria-label={m.chooseApp} className="flex flex-wrap gap-1 border-b border-neutral-800 pb-3">
-                    {(["cursor", "claude", "chatgpt"] as const).map(provider => (
-                      <button
-                        key={provider}
-                        type="button"
-                        aria-pressed={mcpProvider === provider}
-                        onClick={() => { setMcpProvider(provider); setCopyError(null); }}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mcpProvider === provider ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"}`}
-                      >
-                        {provider === "chatgpt" ? "ChatGPT" : provider === "claude" ? "Claude" : "Cursor"}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="text-xs text-neutral-400 leading-relaxed">
-                      {mcpProvider === "cursor"
-                        ? m.cursorInstructions
-                        : mcpProvider === "claude"
-                        ? m.claudeInstructions
-                        : m.chatgptInstructions}
-                    </p>
-
-                    <div className="min-w-0">
-                      <div className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400 mb-1.5">{m.mcpUrl}</div>
-                      <code className="block w-full overflow-x-auto whitespace-nowrap rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-200 select-all">
-                        {mcpServerUrl}
-                      </code>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {mcpProvider === "cursor" && (
-                        mcpReadiness === "ready" ? (
-                          <a href={cursorInstallUrl} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors">
+                  <div className="divide-y divide-neutral-800 border-t border-neutral-800">
+                    <div className="space-y-2 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h5 className="text-sm font-medium text-neutral-100">Cursor</h5>
+                        {mcpReadiness === "ready" ? (
+                          <a href={cursorInstallUrl} className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500">
                             {m.addToCursor} <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                         ) : (
-                          <button type="button" disabled className="px-3 py-2 rounded-md bg-neutral-800 text-neutral-500 text-xs font-medium cursor-not-allowed">
-                            {m.addToCursor}
-                          </button>
-                        )
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void handleCopy(mcpServerUrl, "mcp-url")}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-100 text-xs font-medium transition-colors"
-                      >
-                        {copiedConfig === "mcp-url" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copiedConfig === "mcp-url" ? m.copied : m.copyUrl}
-                      </button>
+                          <button type="button" disabled className="rounded-md bg-neutral-800 px-3 py-2 text-xs text-neutral-500">{m.addToCursor}</button>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.cursorInstructions}</p>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.cursorSetupNote} <button type="button" onClick={() => void handleCopy(oauthConfig, "oauth-config")} className="text-indigo-300 underline underline-offset-2 hover:text-indigo-200">{copiedConfig === "oauth-config" ? m.copiedJson : m.copyJson}</button></p>
                     </div>
-
-                    {mcpProvider === "cursor" && mcpReadiness === "unavailable" && (
-                      <p className="text-xs text-amber-300">{m.cursorNotReady}</p>
-                    )}
-                    {mcpProvider !== "cursor" && isLocalMcpUrl && (
-                      <p className="text-xs text-amber-300">{m.remoteUrlRequired}</p>
-                    )}
-                    {(copyError === "mcp-url" || copyError === "oauth-config") && <p role="alert" className="text-xs text-red-300">{m.copyFailed}</p>}
-                    <p className="text-xs text-neutral-400 leading-relaxed">
-                      {mcpProvider === "cursor" ? (
-                        <>{m.cursorSetupNote} <button type="button" onClick={() => void handleCopy(oauthConfig, "oauth-config")} className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{copiedConfig === "oauth-config" ? m.copiedJson : m.copyJson}</button></>
-                      ) : mcpProvider === "claude" ? (
-                        <>{m.claudeWorkspaceNote} · <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{m.claudeGuide}</a></>
-                      ) : (
-                        <>{m.chatgptAvailabilityNote} · <a href="https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2">{m.chatgptGuide}</a></>
-                      )}
-                    </p>
+                    <div className="space-y-2 py-4">
+                      <h5 className="text-sm font-medium text-neutral-100">Claude</h5>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.claudeInstructions}</p>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.claudeWorkspaceNote} · <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener noreferrer" className="text-indigo-300 underline underline-offset-2 hover:text-indigo-200">{m.claudeGuide}</a></p>
+                    </div>
+                    <div className="space-y-2 py-4">
+                      <h5 className="text-sm font-medium text-neutral-100">ChatGPT</h5>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.chatgptInstructions}</p>
+                      <p className="text-xs leading-relaxed text-neutral-400">{m.chatgptAvailabilityNote} · <a href="https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt" target="_blank" rel="noopener noreferrer" className="text-indigo-300 underline underline-offset-2 hover:text-indigo-200">{m.chatgptGuide}</a></p>
+                    </div>
                   </div>
                 </section>
 

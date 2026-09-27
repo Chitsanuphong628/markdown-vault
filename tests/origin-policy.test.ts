@@ -134,3 +134,30 @@ test("accepts NEXT_PUBLIC_APP_URL when VERCEL_PROJECT_PRODUCTION_URL is unset", 
   }
 });
 
+test("a local production preview accepts only its configured loopback origin", () => {
+  const previous = {
+    nodeEnv: process.env.NODE_ENV,
+    canonical: process.env.NEXT_PUBLIC_APP_URL,
+    vercelEnv: process.env.VERCEL_ENV,
+    allowed: process.env.APP_ALLOWED_ORIGINS,
+  };
+  try {
+    Reflect.set(process.env, "NODE_ENV", "production");
+    process.env.NEXT_PUBLIC_APP_URL = "http://127.0.0.1:3079";
+    delete process.env.VERCEL_ENV;
+    delete process.env.APP_ALLOWED_ORIGINS;
+
+    const request = (origin: string) => new Request(`${origin}/api/folders/example`, {
+      method: "PATCH",
+      headers: { Origin: origin },
+    });
+    assert.equal(rejectCrossOrigin(request("http://127.0.0.1:3079")), null);
+    assert.equal(rejectCrossOrigin(request("http://127.0.0.1:3080"))?.status, 403);
+    assert.equal(rejectCrossOrigin(request("http://evil.example"))?.status, 403);
+  } finally {
+    if (previous.nodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV"); else Reflect.set(process.env, "NODE_ENV", previous.nodeEnv);
+    if (previous.canonical === undefined) delete process.env.NEXT_PUBLIC_APP_URL; else process.env.NEXT_PUBLIC_APP_URL = previous.canonical;
+    if (previous.vercelEnv === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = previous.vercelEnv;
+    if (previous.allowed === undefined) delete process.env.APP_ALLOWED_ORIGINS; else process.env.APP_ALLOWED_ORIGINS = previous.allowed;
+  }
+});

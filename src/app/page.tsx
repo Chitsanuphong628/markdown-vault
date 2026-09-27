@@ -1074,7 +1074,8 @@ export default function AppHome() {
         else if (res.status === 404) failureMessage = t.itemNotFoundError;
         throw new Error("Failed to move folder");
       }
-      loadFolders();
+      await loadFolders();
+      return true;
     } catch (err) {
       console.error("Failed to move folder:", err);
       setFolders(originalFolders);
@@ -1082,7 +1083,8 @@ export default function AppHome() {
         noteId: null,
         message: failureMessage,
       });
-      loadFolders();
+      await loadFolders();
+      return false;
     }
   };
 

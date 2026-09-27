@@ -80,7 +80,10 @@ export function isTrustedAppUrl(requestUrl: string): boolean {
   if (canonical) {
     try {
       const canonicalUrl = new URL(canonical.startsWith("http") ? canonical : `https://${canonical}`);
-      if (canonicalUrl.protocol === "https:" || process.env.NODE_ENV !== "production") {
+      const isLocalPreview = canonicalUrl.protocol === "http:"
+        && ["localhost", "127.0.0.1", "[::1]"].includes(canonicalUrl.hostname)
+        && !process.env.VERCEL_ENV;
+      if (canonicalUrl.protocol === "https:" || process.env.NODE_ENV !== "production" || isLocalPreview) {
         if (!process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_ENV !== "production") {
           allowed.add(canonicalUrl.origin);
         }
