@@ -73,9 +73,9 @@ export default function ShareNotePage({ params }: SharePageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0c0d0e] text-neutral-100 flex flex-col">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[#0c0d0e] text-neutral-100">
       {/* Top Navbar */}
-      <header className="h-14 border-b border-neutral-800/80 px-6 flex items-center justify-between bg-neutral-900/60 backdrop-blur-md sticky top-0 z-20">
+      <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-neutral-800/80 bg-neutral-900/60 px-6 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-neutral-950/80 border border-neutral-800 flex items-center justify-center p-1 shadow-sm">
             <Image
@@ -104,7 +104,7 @@ export default function ShareNotePage({ params }: SharePageProps) {
       </header>
 
       {/* Reader Layout */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <MarkdownViewer note={note} showTitle={true} lang={lang} />
       </main>
     </div>
