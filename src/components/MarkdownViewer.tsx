@@ -642,7 +642,7 @@ export default function MarkdownViewer({ note, onUpdateContent, lang = "en", sho
 
       {/* Main Reading & Article Scroll Area */}
       <div className="flex-1 overflow-y-auto min-w-0">
-        <div className={`max-w-4xl mx-auto ${preview ? "px-4 py-4 sm:px-6 sm:py-6" : "px-4 py-6 sm:px-8 sm:py-9"}`}>
+        <div className={`max-w-4xl mx-auto ${preview ? "px-4 pt-4 pb-20 sm:px-6 sm:pt-6 sm:pb-20" : "px-4 pt-6 pb-24 sm:px-8 sm:pt-9 sm:pb-20"}`}>
           {/* Document Header */}
           {!preview && <div className="mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-neutral-800/80">
             <div className={`flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-neutral-400 ${showTitle ? "mb-3" : ""}`}>

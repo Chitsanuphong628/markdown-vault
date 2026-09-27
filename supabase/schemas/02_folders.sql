@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS public."Folder" (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "parentId" TEXT REFERENCES public."Folder"(id) ON DELETE CASCADE,
     "userId" TEXT NOT NULL REFERENCES public."User"(id) ON DELETE CASCADE,
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -16,4 +17,5 @@ CREATE TABLE IF NOT EXISTS public."Folder" (
 CREATE INDEX IF NOT EXISTS "Folder_parentId_idx" ON public."Folder" ("parentId");
 -- Compound Index สำหรับกรองโฟลเดอร์ตามเจ้าของและ Parent
 CREATE INDEX IF NOT EXISTS "Folder_userId_parentId_idx" ON public."Folder" ("userId", "parentId");
+CREATE INDEX IF NOT EXISTS "Folder_userId_parentId_sortOrder_idx" ON public."Folder" ("userId", "parentId", "sortOrder");
 CREATE INDEX IF NOT EXISTS "folders_user_idx" ON public."Folder" ("userId");

@@ -31,10 +31,19 @@ export async function GET(req: Request) {
   let query = getSupabaseAdmin()
     .from("Note")
     .select(q
-      ? "id, title, content, themeColor, folderId, createdAt, updatedAt, revision"
-      : "id, title, themeColor, folderId, createdAt, updatedAt, revision")
-    .eq("userId", user.id)
-    .order("updatedAt", { ascending: false });
+      ? "id, title, content, themeColor, folderId, createdAt, updatedAt, revision, sortOrder"
+      : "id, title, themeColor, folderId, createdAt, updatedAt, revision, sortOrder")
+    .eq("userId", user.id);
+
+  if (q) {
+    query = query.order("updatedAt", { ascending: false });
+  } else {
+    // Sort within folder groups first; the sidebar renders each folder separately.
+    query = query
+      .order("folderId", { ascending: true, nullsFirst: true })
+      .order("sortOrder", { ascending: true })
+      .order("updatedAt", { ascending: false });
+  }
 
   if (folderId) {
     query = query.eq("folderId", folderId);
@@ -57,6 +66,7 @@ export async function GET(req: Request) {
     createdAt: string;
     updatedAt: string;
     revision: number;
+    sortOrder: number;
     content?: string;
   }) => {
     const color = isNoteColorKey(n.themeColor) ? n.themeColor : "default";
@@ -67,6 +77,7 @@ export async function GET(req: Request) {
       createdAt: n.createdAt,
       updatedAt: n.updatedAt,
       revision: n.revision,
+      sortOrder: n.sortOrder,
       color,
       ...(q ? { excerpt: buildNoteSearchExcerpt(n.content || "", q) } : {}),
     };

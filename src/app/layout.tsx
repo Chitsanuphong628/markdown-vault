@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import PwaServiceWorker from "@/components/PwaServiceWorker";
+import TextScaleControl from "@/components/TextScaleControl";
 import "./globals.css";
 
 const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -39,6 +40,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
   themeColor: "#090a0f",
   colorScheme: "dark",
 };
@@ -49,10 +55,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="th" className="h-full antialiased dark">
-      <body className="h-full bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
+    <html lang="th" className="min-h-full antialiased dark">
+      <body className="min-h-dvh bg-neutral-950 text-neutral-100 font-sans">
         <PwaServiceWorker />
         {children}
+        <TextScaleControl />
         <footer className="sr-only">
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>

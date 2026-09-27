@@ -5,7 +5,14 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --nota-text-scale: 1;
 }
+
+html { font-size: calc(100% * var(--nota-text-scale)); }
+html [class~="text-[9px]"] { font-size: calc(9px * var(--nota-text-scale)); }
+html [class~="text-[10px]"] { font-size: calc(10px * var(--nota-text-scale)); }
+html [class~="text-[11px]"] { font-size: calc(11px * var(--nota-text-scale)); }
+html [class~="text-[13px]"] { font-size: calc(13px * var(--nota-text-scale)); }
 
 @theme inline {
   --color-background: var(--background);

@@ -14,12 +14,13 @@
 | **04** | [`04_indexes_and_search.sql`](./04_indexes_and_search.sql) | **Search & Performance** | การเปิดใช้ `pg_trgm` และสร้าง GIN Trigram Index เพื่อเร่งความเร็วการค้นหาโน้ต |
 | **05** | [`05_functions_and_rpcs.sql`](./05_functions_and_rpcs.sql) | **Functions & Stored Procedures** | ฟังก์ชันระดับฐานข้อมูล (`update_nota_folder`, `delete_nota_account`, `delete_nota_empty_folder`) |
 | **06** | [`06_security_and_rls.sql`](./06_security_and_rls.sql) | **Security & Access Control** | การเปิด Row Level Security (RLS) และจำกัดสิทธิ์เข้าถึงเฉพาะ Backend Service Role |
+| **07** | [`07_sidebar_ordering.sql`](./07_sidebar_ordering.sql) | **Sidebar Ordering** | ลำดับโน้ตและโฟลเดอร์ที่ผู้ใช้จัดเอง, gesture ย้ายโฟลเดอร์, และ RPC ตรวจวงจร |
 
 ---
 
 ## 📌 วิธีจัดระเบียบใน Supabase Dashboard (SQL Editor)
 
-คุณสามารถเปิด [Supabase SQL Editor](https://supabase.com/dashboard/project/nbdkkwomonxcrdwuvsaj/sql) แล้วสร้างแท็บแยกตาม 6 หมวดหมู่ข้างต้นได้ทันที:
+คุณสามารถเปิด [Supabase SQL Editor](https://supabase.com/dashboard/project/nbdkkwomonxcrdwuvsaj/sql) แล้วสร้างแท็บแยกตาม 7 หมวดหมู่ข้างต้นได้ทันที:
 1. แท็บเดิม `base` (`1db72437-74a8-478a-8bf6-362800e358ba`) สามารถเปลี่ยนชื่อหรือใช้เป็น **`01_Users`**
 2. กดปุ่ม **New query (+)** เพื่อสร้างแท็บใหม่:
    - `02_Folders` (คัดลอกเนื้อหาจาก `02_folders.sql`)
@@ -27,3 +28,4 @@
    - `04_Indexes_Search` (คัดลอกเนื้อหาจาก `04_indexes_and_search.sql`)
    - `05_Functions_RPC` (คัดลอกเนื้อหาจาก `05_functions_and_rpcs.sql`)
    - `06_Security_RLS` (คัดลอกเนื้อหาจาก `06_security_and_rls.sql`)
+   - `07_Sidebar_Ordering` (คัดลอกเนื้อหาจาก `07_sidebar_ordering.sql`)

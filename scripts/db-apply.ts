@@ -21,6 +21,7 @@ const ORDERED_SCRIPTS = [
   "04_indexes_and_search.sql",
   "05_functions_and_rpcs.sql",
   "06_security_and_rls.sql",
+  "07_sidebar_ordering.sql",
 ];
 
 async function executeSql(sql: string): Promise<void> {
