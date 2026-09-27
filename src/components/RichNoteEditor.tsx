@@ -1,7 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { JSONContent } from "@tiptap/core";
@@ -48,26 +47,17 @@ function ToolbarButton({
   active = false,
   onClick,
   children,
-  hasPopup,
-  expanded,
-  controls,
 }: {
   label: string;
   active?: boolean;
   onClick: () => void;
   children: React.ReactNode;
-  hasPopup?: "menu";
-  expanded?: boolean;
-  controls?: string;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
-      aria-pressed={hasPopup === "menu" ? undefined : active}
-      aria-haspopup={hasPopup}
-      aria-expanded={expanded}
-      aria-controls={controls}
+      aria-pressed={active}
       title={label}
       onMouseDown={event => event.preventDefault()}
       onClick={onClick}
@@ -96,10 +86,7 @@ const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(fun
   const editorRef = useRef<Editor | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
-  const insertMenuPanelRef = useRef<HTMLDivElement | null>(null);
-  const shouldFocusFirstMenuItemRef = useRef(false);
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
-  const [insertMenuPosition, setInsertMenuPosition] = useState<{ left: number; top: number } | null>(null);
 
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useEffect(() => { onDirtyChangeRef.current = onDirtyChange; }, [onDirtyChange]);
@@ -191,14 +178,10 @@ const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(fun
   useEffect(() => {
     if (!isInsertMenuOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!insertMenuRef.current?.contains(target) && !insertMenuPanelRef.current?.contains(target)) setIsInsertMenuOpen(false);
+      if (!insertMenuRef.current?.contains(event.target as Node)) setIsInsertMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsInsertMenuOpen(false);
-        insertMenuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-      }
+      if (event.key === "Escape") setIsInsertMenuOpen(false);
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     document.addEventListener("keydown", closeOnEscape);
@@ -207,39 +190,6 @@ const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(fun
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [isInsertMenuOpen]);
-
-  const updateInsertMenuPosition = useCallback(() => {
-    const anchor = insertMenuRef.current;
-    const panel = insertMenuPanelRef.current;
-    if (!anchor || !panel) return;
-    const anchorRect = anchor.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const margin = 8;
-    const left = Math.max(margin, Math.min(anchorRect.left, window.innerWidth - panelRect.width - margin));
-    const below = anchorRect.bottom + 4;
-    const top = below + panelRect.height <= window.innerHeight - margin
-      ? below
-      : Math.max(margin, anchorRect.top - panelRect.height - 4);
-    setInsertMenuPosition({ left, top });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!isInsertMenuOpen) return;
-    updateInsertMenuPosition();
-    const onScroll = () => updateInsertMenuPosition();
-    window.addEventListener("resize", onScroll);
-    document.addEventListener("scroll", onScroll, true);
-    return () => {
-      window.removeEventListener("resize", onScroll);
-      document.removeEventListener("scroll", onScroll, true);
-    };
-  }, [isInsertMenuOpen, updateInsertMenuPosition]);
-
-  useLayoutEffect(() => {
-    if (!isInsertMenuOpen || !insertMenuPosition || !shouldFocusFirstMenuItemRef.current) return;
-    insertMenuPanelRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
-    shouldFocusFirstMenuItemRef.current = false;
-  }, [isInsertMenuOpen, insertMenuPosition]);
 
   const insertMarkdown = useCallback((markdown: string) => {
     const target = editorRef.current;
@@ -330,57 +280,17 @@ const RichNoteEditor = forwardRef<RichNoteEditorHandle, RichNoteEditorProps>(fun
         <ToolbarButton label={lang === "th" ? "เส้นคั่น" : "Divider"} onClick={() => editor.chain().focus().setHorizontalRule().run()}><Minus className={icon} /></ToolbarButton>
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-neutral-800" />
         <div ref={insertMenuRef} className="relative">
-          <ToolbarButton
-            label={lang === "th" ? "แทรก" : "Insert"}
-            active={isInsertMenuOpen}
-            hasPopup="menu"
-            expanded={isInsertMenuOpen}
-            controls="nota-insert-menu"
-            onClick={() => {
-              shouldFocusFirstMenuItemRef.current = !isInsertMenuOpen;
-              setIsInsertMenuOpen(value => !value);
-            }}
-          ><Plus className={icon} /><span>{lang === "th" ? "แทรก" : "Insert"}</span></ToolbarButton>
-          {isInsertMenuOpen && typeof document !== "undefined" && createPortal(
-            <div
-              ref={insertMenuPanelRef}
-              id="nota-insert-menu"
-              role="menu"
-              aria-label={lang === "th" ? "แทรกเนื้อหา" : "Insert content"}
-              onKeyDown={event => {
-                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]"));
-                const index = items.indexOf(document.activeElement as HTMLButtonElement);
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  const step = event.key === "ArrowDown" ? 1 : -1;
-                  items[(index + step + items.length) % items.length]?.focus();
-                } else if (event.key === "Home") {
-                  event.preventDefault();
-                  items[0]?.focus();
-                } else if (event.key === "End") {
-                  event.preventDefault();
-                  items.at(-1)?.focus();
-                }
-              }}
-              style={{
-                position: "fixed",
-                left: insertMenuPosition?.left ?? 8,
-                top: insertMenuPosition?.top ?? 8,
-                visibility: insertMenuPosition ? "visible" : "hidden",
-              }}
-              className="z-[80] max-h-[calc(100dvh-1rem)] min-w-48 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-md border border-neutral-700 bg-neutral-900 p-1 shadow-xl"
-            >
-              {([
-                ["table", lang === "th" ? "ตาราง" : "Table"],
-                ["image", lang === "th" ? "รูปจาก URL" : "Image from URL"],
-                ["code", lang === "th" ? "บล็อกโค้ด" : "Code block"],
-                ["math", lang === "th" ? "สูตรในบรรทัด" : "Inline formula"],
-                ["mathBlock", lang === "th" ? "สูตรแยกบรรทัด" : "Display formula"],
-                ["diagram", lang === "th" ? "แผนภาพ" : "Diagram"],
-              ] as const).map(([kind, label]) => <button key={kind} type="button" role="menuitem" onMouseDown={event => event.preventDefault()} onClick={() => insertFromMenu(kind)} className="flex min-h-11 w-full items-center rounded px-3 text-left text-xs text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-indigo-400">{label}</button>)}
-            </div>,
-            document.body,
-          )}
+          <ToolbarButton label={lang === "th" ? "แทรก" : "Insert"} active={isInsertMenuOpen} onClick={() => setIsInsertMenuOpen(value => !value)}><Plus className={icon} /><span>{lang === "th" ? "แทรก" : "Insert"}</span></ToolbarButton>
+          {isInsertMenuOpen && <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-48 rounded-md border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
+            {([
+              ["table", lang === "th" ? "ตาราง" : "Table"],
+              ["image", lang === "th" ? "รูปจาก URL" : "Image from URL"],
+              ["code", lang === "th" ? "บล็อกโค้ด" : "Code block"],
+              ["math", lang === "th" ? "สูตรในบรรทัด" : "Inline formula"],
+              ["mathBlock", lang === "th" ? "สูตรแยกบรรทัด" : "Display formula"],
+              ["diagram", lang === "th" ? "แผนภาพ" : "Diagram"],
+            ] as const).map(([kind, label]) => <button key={kind} type="button" role="menuitem" onMouseDown={event => event.preventDefault()} onClick={() => insertFromMenu(kind)} className="flex min-h-10 w-full items-center rounded px-3 text-left text-xs text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-indigo-400">{label}</button>)}
+          </div>}
         </div>
       </div>
       <BubbleMenu editor={editor} options={{ placement: "top" }}>

@@ -1041,42 +1041,48 @@ export default function AppHome() {
   };
 
   // Handle Move Note
-  const handleMoveNote = async (noteId: string, targetFolderId: string | null, beforeId: string | null = null, afterId: string | null = null) => {
+  const handleMoveNote = async (noteId: string, targetFolderId: string | null) => {
     try {
-      const response = await fetch("/api/sidebar/reorder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "note", id: noteId, targetFolderId, beforeId, afterId }),
-      });
-      if (!response.ok) throw Object.assign(new Error("sidebar-reorder"), { status: response.status });
-      await Promise.all([loadFolders(), loadNotes()]);
+      await patchNote(noteId, { folderId: targetFolderId });
+      await loadNotes();
     } catch (err) {
       console.error("Failed to move note:", err);
       const status = (err as Error & { status?: number }).status;
       setOperationError({
         noteId,
-        message: status === 404 ? t.itemNotFoundError : t.moveNoteError,
+        message: status === 404 ? t.itemNotFoundError : status === 409 ? t.noteChangedError : t.moveNoteError,
       });
     }
   };
 
   // Handle Move Folder
-  const handleMoveFolder = async (folderId: string, targetParentId: string | null, beforeId: string | null = null, afterId: string | null = null) => {
+  const handleMoveFolder = async (folderId: string, targetParentId: string | null) => {
+    const originalFolders = [...folders];
+    let failureMessage = t.moveFolderError;
+    // Optimistic UI update
+    setFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, parentId: targetParentId } : f))
+    );
     try {
-      const response = await fetch("/api/sidebar/reorder", {
-        method: "POST",
+      const res = await fetch(`/api/folders/${folderId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "folder", id: folderId, targetParentId, beforeId, afterId }),
+        body: JSON.stringify({ parentId: targetParentId }),
       });
-      if (!response.ok) throw Object.assign(new Error("sidebar-reorder"), { status: response.status });
-      await Promise.all([loadFolders(), loadNotes()]);
+      if (!res.ok) {
+        if (res.status === 400) failureMessage = t.folderMoveInvalidError;
+        else if (res.status === 404) failureMessage = t.itemNotFoundError;
+        throw new Error("Failed to move folder");
+      }
+      loadFolders();
     } catch (err) {
       console.error("Failed to move folder:", err);
-      const status = (err as Error & { status?: number }).status;
+      setFolders(originalFolders);
       setOperationError({
         noteId: null,
-        message: status === 400 ? t.folderMoveInvalidError : status === 404 ? t.itemNotFoundError : t.moveFolderError,
+        message: failureMessage,
       });
+      loadFolders();
     }
   };
 
@@ -1154,7 +1160,7 @@ export default function AppHome() {
   return (
     <div className="h-[100dvh] w-full bg-neutral-950 text-neutral-200 flex overflow-hidden font-sans antialiased">
       {operationError && (
-        <div role="alert" className="fixed left-1/2 z-[100] flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-lg border border-rose-500/40 bg-rose-950 px-4 py-3 text-sm text-rose-100 shadow-xl" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
+        <div role="alert" className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90vw] rounded-lg border border-rose-500/40 bg-rose-950 px-4 py-3 text-sm text-rose-100 shadow-xl flex items-center gap-3">
           <span>{operationError.message}</span>
           <button type="button" onClick={() => setOperationError(null)} aria-label={t.dismissError} className="text-rose-200 hover:text-white">×</button>
         </div>
@@ -1214,7 +1220,7 @@ export default function AppHome() {
         ) : activeNote ? (
           <>
             {/* Note title and writing controls */}
-            <div className="min-h-14 border-b border-neutral-800/80 bg-neutral-900/40 px-2 py-2 sm:px-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 z-10" style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingLeft: "max(0.5rem, env(safe-area-inset-left))", paddingRight: "max(0.5rem, env(safe-area-inset-right))" }}>
+            <div className="min-h-14 border-b border-neutral-800/80 bg-neutral-900/40 px-2 py-2 sm:px-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 z-10">
               <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <button
                   type="button"

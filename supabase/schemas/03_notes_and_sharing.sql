@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS public."Note" (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title TEXT NOT NULL,
     content TEXT NOT NULL DEFAULT '',
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "folderId" TEXT REFERENCES public."Folder"(id) ON DELETE SET NULL,
     "userId" TEXT NOT NULL REFERENCES public."User"(id) ON DELETE CASCADE,
     "isShared" BOOLEAN NOT NULL DEFAULT false,
@@ -23,7 +22,6 @@ CREATE TABLE IF NOT EXISTS public."Note" (
 CREATE INDEX IF NOT EXISTS "Note_folderId_idx" ON public."Note" ("folderId");
 -- Index ดึงรายการโน้ตของผู้ใช้เรียงตามเวลาแก้ไขล่าสุด (User Note Listing)
 CREATE INDEX IF NOT EXISTS "Note_userId_updatedAt_idx" ON public."Note" ("userId", "updatedAt" DESC);
-CREATE INDEX IF NOT EXISTS "Note_userId_folderId_sortOrder_idx" ON public."Note" ("userId", "folderId", "sortOrder");
 CREATE INDEX IF NOT EXISTS "notes_user_idx" ON public."Note" ("userId");
 
 -- Unique Index สำหรับ Public Shared Links
