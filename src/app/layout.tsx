@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import PwaServiceWorker from "@/components/PwaServiceWorker";
+import PwaZoomPolicy from "@/components/PwaZoomPolicy";
 import "./globals.css";
 
 const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -52,6 +53,7 @@ export default function RootLayout({
     <html lang="th" className="h-full antialiased dark">
       <body className="h-full bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
         <PwaServiceWorker />
+        <PwaZoomPolicy />
         {children}
         <footer className="sr-only">
           <Link href="/privacy">Privacy</Link>
