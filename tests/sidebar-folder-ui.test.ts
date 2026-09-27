@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import Sidebar from "../src/components/Sidebar";
 
-test("the sidebar hides child folders until their parent is opened and offers a move action", () => {
+test("the sidebar hides child folders until their parent is opened without an inline move form", () => {
   const noop = async () => {};
   const html = renderToStaticMarkup(createElement(Sidebar, {
     user: { id: "user", name: "Test", email: "test@example.com" },
@@ -34,5 +34,6 @@ test("the sidebar hides child folders until their parent is opened and offers a 
   }));
   assert.match(html, />Parent</);
   assert.doesNotMatch(html, />Child</);
-  assert.match(html, /aria-label="Move folder: Parent"/);
+  assert.doesNotMatch(html, /Move folder|Move to|move-folder-/);
+  assert.match(html, /draggable="true"/);
 });

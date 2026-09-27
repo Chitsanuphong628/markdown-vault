@@ -16,7 +16,6 @@ import {
   Sparkles,
   Settings,
   X,
-  MoveRight,
 } from "lucide-react";
 
 import { Language, I18N_MAIN } from "@/lib/i18n";
@@ -106,8 +105,6 @@ function Sidebar({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [movingFolderId, setMovingFolderId] = useState<string | null>(null);
-  const [moveTargetFolderId, setMoveTargetFolderId] = useState<string | null>(null);
 
   // Inline rename state for note & folder
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -217,20 +214,6 @@ function Sidebar({
     },
     [folderById]
   );
-
-  const getFolderPath = useCallback((folder: FolderItem): string => {
-    const names = [folder.name];
-    const seen = new Set([folder.id]);
-    let parentId = folder.parentId;
-    while (parentId && !seen.has(parentId)) {
-      const parent = folderById.get(parentId);
-      if (!parent) break;
-      names.unshift(parent.name);
-      seen.add(parent.id);
-      parentId = parent.parentId;
-    }
-    return names.join(" / ");
-  }, [folderById]);
 
   const revealFolder = useCallback((folderId: string) => {
     const path: string[] = [];
@@ -539,19 +522,6 @@ function Sidebar({
                 <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <span className="text-[10px] text-neutral-500 mr-1">{folderNotes.length + childCount}</span>
                   <button
-                    type="button"
-                    title={t.moveFolderAction}
-                    aria-label={`${t.moveFolderAction}: ${folder.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMovingFolderId(folder.id);
-                      setMoveTargetFolderId(folder.parentId);
-                    }}
-                    className="p-1 hover:text-indigo-300 rounded transition-colors"
-                  >
-                    <MoveRight className="w-3 h-3" />
-                  </button>
-                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       if (confirm(t.deleteFolderConfirm(folder.name))) {
@@ -564,37 +534,6 @@ function Sidebar({
                   </button>
                 </div>
               </div>
-
-              {movingFolderId === folder.id && (
-                <form
-                  className="space-y-2 rounded-md border border-neutral-700 bg-neutral-900 p-2"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    if (moveTargetFolderId === folder.parentId || isDescendantFolder(folder.id, moveTargetFolderId)) return;
-                    const moved = await onMoveFolder?.(folder.id, moveTargetFolderId);
-                    if (!moved) return;
-                    if (moveTargetFolderId) revealFolder(moveTargetFolderId);
-                    setMovingFolderId(null);
-                  }}
-                >
-                  <label htmlFor={`move-folder-${folder.id}`} className="block text-[11px] text-neutral-300">{t.moveFolderTo}</label>
-                  <select
-                    id={`move-folder-${folder.id}`}
-                    value={moveTargetFolderId ?? ""}
-                    onChange={(event) => setMoveTargetFolderId(event.target.value || null)}
-                    className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
-                  >
-                    <option value="">{t.folderTopLevel}</option>
-                    {folders.filter(target => !isDescendantFolder(folder.id, target.id)).map(target => (
-                      <option key={target.id} value={target.id}>{getFolderPath(target)}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
-                    <button type="submit" disabled={!onMoveFolder || moveTargetFolderId === folder.parentId} className="rounded-md bg-indigo-600 px-2 py-1 text-xs text-white disabled:opacity-40">{t.moveFolderAction}</button>
-                    <button type="button" onClick={() => setMovingFolderId(null)} className="rounded-md px-2 py-1 text-xs text-neutral-300">{t.cancelBtn}</button>
-                  </div>
-                </form>
-              )}
 
               {/* Sub-notes inside folder */}
               {isOpen && (
