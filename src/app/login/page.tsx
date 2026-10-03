@@ -5,10 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { KeyRound, Mail, ArrowRight, Eye, EyeOff, Network, FolderTree, Loader2 } from "lucide-react";
-import LanguageToggle from "@/components/LanguageToggle";
-import { postLoginPath } from "@/lib/auth-redirect";
-import { AUTH_COPY, getLoginError } from "@/lib/authCopy";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
+import { LanguageToggle, useLanguagePreference } from "@/modules/app-shell/client";
+import { postLoginPath, AUTH_COPY, getLoginError } from "@/modules/identity/shared";
 
 export default function LoginPage() {
   const router = useRouter();

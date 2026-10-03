@@ -14,8 +14,8 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
-import { AUTH_COPY } from "@/lib/authCopy";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
+import { AUTH_COPY } from "@/modules/identity/shared";
+import { useLanguagePreference } from "@/modules/app-shell/client";
 
 interface UserInfo {
   id: string;

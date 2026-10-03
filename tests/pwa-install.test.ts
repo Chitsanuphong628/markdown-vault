@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getPwaInstallAction, isIosLike, isPwaInstalled, isSafariOnMac } from "../src/lib/pwaInstall";
+import { getPwaInstallAction, isIosLike, isPwaInstalled, isSafariOnMac } from "../src/modules/app-shell/client/pwaInstall";
 
 test("install UI selects prompt, manual guidance, and installed states", () => {
   assert.equal(getPwaInstallAction({ installed: true, hasPrompt: true }), "hidden");

@@ -16,9 +16,8 @@ import {
   Share2,
   Loader2,
 } from "lucide-react";
-import LanguageToggle from "@/components/LanguageToggle";
-import { AUTH_COPY, getRegisterError } from "@/lib/authCopy";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
+import { LanguageToggle, useLanguagePreference } from "@/modules/app-shell/client";
+import { AUTH_COPY, getRegisterError } from "@/modules/identity/shared";
 
 export default function RegisterPage() {
   const router = useRouter();

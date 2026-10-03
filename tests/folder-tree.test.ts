@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getVisibleFolderRows } from "../src/lib/folderTree";
+import { getVisibleFolderRows } from "../src/modules/notes/client/folderTree";
 
 const folders = [
   { id: "work", name: "Work", parentId: null },

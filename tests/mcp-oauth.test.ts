@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import type { RegisteredClientInfo } from "../src/lib/mcp/oauth";
+import type { RegisteredClientInfo } from "../src/modules/mcp/server/oauth";
 
 process.env.NEXT_PUBLIC_APP_URL = "https://nota.example";
 process.env.APP_ALLOWED_ORIGINS = "https://nota.example";
 process.env.ENABLE_MCP = "true";
 process.env.JWT_SECRET = "test-jwt-secret-with-at-least-32-characters-long-1234";
+process.env.MCP_OAUTH_SIGNING_SECRET = "test-mcp-oauth-secret-with-at-least-32-characters-long-1234";
 
 function createPkcePair() {
   const verifier = crypto.randomBytes(32).toString("base64url");
@@ -15,7 +16,7 @@ function createPkcePair() {
 }
 
 test("getNativeOAuthMetadata returns RFC 8414 compliant metadata with registration_endpoint", async () => {
-  const { getNativeOAuthMetadata } = await import("../src/lib/mcp/oauth");
+  const { getNativeOAuthMetadata } = await import("../src/modules/mcp/server/oauth");
   const metadata = getNativeOAuthMetadata("https://nota.example/api/mcp");
 
   assert.equal(metadata.issuer, "https://nota.example");
@@ -27,7 +28,7 @@ test("getNativeOAuthMetadata returns RFC 8414 compliant metadata with registrati
 });
 
 test("serveMcpOAuthMetadata serves RFC 8414 and RFC 9728 discovery endpoints", async () => {
-  const { serveMcpOAuthMetadata } = await import("../src/lib/mcp/http");
+  const { serveMcpOAuthMetadata } = await import("../src/modules/mcp/server/http");
 
   const authServerRes = serveMcpOAuthMetadata(
     new Request("https://nota.example/.well-known/oauth-authorization-server")
@@ -58,7 +59,7 @@ function fakeOAuthStore() {
 }
 
 test("registered clients can authorize only their registered callback", async () => {
-  const { createOAuthService } = await import("../src/lib/mcp/oauth");
+  const { createOAuthService } = await import("../src/modules/mcp/server/oauth");
   const oauth = createOAuthService(fakeOAuthStore(), async () => ({ token: "test-token" }));
   const client = await oauth.registerDynamicClient({
     client_name: "Cursor IDE",
@@ -86,7 +87,7 @@ test("registered clients can authorize only their registered callback", async ()
 });
 
 test("registration retains a non-Latin client display name", async () => {
-  const { createOAuthService } = await import("../src/lib/mcp/oauth");
+  const { createOAuthService } = await import("../src/modules/mcp/server/oauth");
   const oauth = createOAuthService(fakeOAuthStore());
   const client = await oauth.registerDynamicClient({
     client_name: "ผู้ช่วยโน้ต ไทย",
@@ -96,7 +97,7 @@ test("registration retains a non-Latin client display name", async () => {
 });
 
 test("verifyPkce validates S256 code verifier and rejects invalid verifiers", async () => {
-  const { verifyPkce } = await import("../src/lib/mcp/oauth");
+  const { verifyPkce } = await import("../src/modules/mcp/server/oauth");
   const { verifier, challenge } = createPkcePair();
 
   assert.equal(verifyPkce(verifier, challenge, "S256"), true);
@@ -106,7 +107,7 @@ test("verifyPkce validates S256 code verifier and rejects invalid verifiers", as
 });
 
 test("a code can be redeemed only once across OAuth service instances", async () => {
-  const { createOAuthService } = await import("../src/lib/mcp/oauth");
+  const { createOAuthService } = await import("../src/modules/mcp/server/oauth");
   const store = fakeOAuthStore();
   const first = createOAuthService(store, async () => ({ token: "test-token" }));
   const second = createOAuthService(store, async () => ({ token: "test-token" }));

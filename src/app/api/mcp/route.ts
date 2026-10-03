@@ -1,4 +1,4 @@
-import { serveMcpHttp } from "@/lib/mcp/http";
+import { serveMcpHttp } from "@/modules/mcp/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { GfmAlertBlockquote, GfmAlertCard, GfmAlertMarkdownBlockquote } from "../src/components/GfmAlertCard";
+import { GfmAlertBlockquote, GfmAlertCard, GfmAlertMarkdownBlockquote } from "../src/modules/content/client/components/GfmAlertCard";
 
 test("renders GFM alerts with a readable label and formatted body", () => {
   const markup = renderToStaticMarkup(createElement(GfmAlertCard, {

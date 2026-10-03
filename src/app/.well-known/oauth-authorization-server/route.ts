@@ -1,4 +1,4 @@
-import { serveMcpOAuthMetadata } from "@/lib/mcp/http";
+import { serveMcpOAuthMetadata } from "@/modules/mcp/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

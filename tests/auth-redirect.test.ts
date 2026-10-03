@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { postLoginPath } from "../src/lib/auth-redirect";
+import { postLoginPath } from "../src/modules/identity/shared/auth-redirect";
 
 test("login resumes the original OAuth authorization request", () => {
   const next = "/oauth/authorize?client_id=client-1&state=abc";

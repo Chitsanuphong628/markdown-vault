@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { enforceAuthRateLimit } from "../src/lib/rate-limit";
+import { enforceAuthRateLimit } from "../src/platform/server/rate-limit";
 
 test("enforceAuthRateLimit allows requests in production when Upstash is absent using in-memory limiter", async () => {
   const previousEnv = process.env.NODE_ENV;

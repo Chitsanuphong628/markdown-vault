@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyNoteBodyChange, applyNoteTheme, parseNoteTheme } from "../src/lib/noteTheme";
+import { applyNoteBodyChange, applyNoteTheme, parseNoteTheme } from "../src/modules/content/shared/noteTheme";
 
 test("visual editor updates the body without dropping note frontmatter", () => {
   const original = "---\ntitle: Original\ntags: [a, b]\ncolor: sage\n---\n\n# Original body";

@@ -6,7 +6,7 @@ process.env.APP_ALLOWED_ORIGINS = "https://nota.example";
 process.env.ENABLE_MCP = "true";
 
 test("HTTP MCP rejects missing and invalid bearer credentials before protocol dispatch", async () => {
-  const { serveMcpHttp } = await import("../src/lib/mcp/http");
+  const { serveMcpHttp } = await import("../src/modules/mcp/server/http");
   const request = (authorization?: string) => new Request("https://nota.example/api/mcp", {
     method: "POST", headers: authorization ? { Authorization: authorization } : {},
   });
@@ -18,7 +18,7 @@ test("HTTP MCP rejects missing and invalid bearer credentials before protocol di
 });
 
 test("HTTP MCP rejects another host and browser origin", async () => {
-  const { serveMcpHttp } = await import("../src/lib/mcp/http");
+  const { serveMcpHttp } = await import("../src/modules/mcp/server/http");
   assert.equal((await serveMcpHttp(new Request("https://evil.example/api/mcp"))).status, 403);
   assert.equal((await serveMcpHttp(new Request("https://nota.example/api/mcp", {
     headers: { Origin: "https://evil.example" },

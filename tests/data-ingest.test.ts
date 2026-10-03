@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { importFiles, isSupportedFile } from "../src/lib/dataIngest";
+import { importFiles, isSupportedFile } from "../src/modules/notes/client/dataIngest";
 
 test("import keeps a file in the failed list when the note endpoint rejects it", async () => {
   const file = new File(["# Meeting"], "meeting.md", { type: "text/markdown" });

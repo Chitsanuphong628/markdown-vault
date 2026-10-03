@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rejectCrossOrigin } from "../src/lib/security";
+import { rejectCrossOrigin } from "../src/platform/server/security";
 
 test("production accepts its Vercel project domain even if canonical metadata URL differs", () => {
   const previous = {

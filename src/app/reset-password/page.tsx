@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AUTH_COPY } from "@/lib/authCopy";
-import LanguageToggle from "@/components/LanguageToggle";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
+import { AUTH_COPY } from "@/modules/identity/shared";
+import { LanguageToggle, useLanguagePreference } from "@/modules/app-shell/client";
 
 export default function ResetPasswordPage() {
   const [lang, setLang] = useLanguagePreference();

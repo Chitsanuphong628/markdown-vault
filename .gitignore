@@ -43,3 +43,7 @@ next-env.d.ts
 
 # supabase
 supabase/.temp/
+
+# browser checks
+/test-results/
+/playwright-report/

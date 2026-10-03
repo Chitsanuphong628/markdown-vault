@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import reactHooks from "eslint-plugin-react-hooks";
+import { moduleBoundaryPlugin } from "./eslint/module-boundaries.mjs";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -16,6 +17,11 @@ const eslintConfig = defineConfig([
     // The paused MCP server remains CommonJS until its isolated rework.
     "mcp-server/**",
   ]),
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    plugins: { nota: moduleBoundaryPlugin },
+    rules: { "nota/imports": "error" },
+  },
   {
     // Existing client screens are being incrementally decomposed. Keep their
     // debt visible in CI without preventing security fixes from shipping.

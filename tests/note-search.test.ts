@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildNoteSearchExcerpt } from "../src/lib/noteSearch";
+import { buildNoteSearchExcerpt } from "../src/modules/notes/shared/noteSearch";
 
 test("returns a short plain-text excerpt around a content match", () => {
   const excerpt = buildNoteSearchExcerpt("---\ntags: [x]\n---\n\n# Heading\n\nIntro **text** and target phrase near the middle.", "target phrase", 32);

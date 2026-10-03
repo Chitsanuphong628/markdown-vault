@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase";
-import { getSessionUser } from "@/lib/auth";
-import { assertOwnedFolder } from "@/lib/ownership";
-import { rejectCrossOrigin } from "@/lib/security";
+import { getSessionUser } from "@/modules/identity/server";
+import { rejectCrossOrigin } from "@/platform/server";
+import { createFolderForOwner, listFoldersForOwner } from "@/modules/notes/server";
 import { z } from "zod";
 
 const folderSchema = z.object({ name: z.string().trim().min(1).max(120), parentId: z.string().uuid().nullable().optional() });
@@ -10,16 +9,12 @@ const folderSchema = z.object({ name: z.string().trim().min(1).max(120), parentI
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: folders, error } = await getSupabaseAdmin()
-    .from("Folder")
-    .select("*")
-    .eq("userId", user.id)
-    .order("name", { ascending: true });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ folders: folders || [] });
+  try {
+    const folders = await listFoldersForOwner(user.id);
+    return NextResponse.json({ folders });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to list folders" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -31,25 +26,10 @@ export async function POST(req: Request) {
   try {
     const parsed = folderSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
-    const { name, parentId } = parsed.data;
-    if (!(await assertOwnedFolder(parentId, user.id))) return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });
-
-    const { data: folder, error } = await getSupabaseAdmin()
-      .from("Folder")
-      .insert([
-        {
-          name,
-          parentId: parentId || null,
-          userId: user.id,
-        },
-      ])
-      .select("*")
-      .single();
-
-    if (error) throw error;
-
+    const folder = await createFolderForOwner(user.id, parsed.data.name, parsed.data.parentId);
     return NextResponse.json({ folder }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to create folder" }, { status: 500 });
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Parent folder not found" ? 404 : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create folder" }, { status });
   }
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteEmptyFolder } from "../src/lib/folderLifecycle";
+import { deleteEmptyFolder } from "../src/modules/notes/server/folderLifecycle";
 
 test("folder deletion reports a nonempty folder without deleting its contents", async () => {
   const result = await deleteEmptyFolder("owner-a", "folder-a", {

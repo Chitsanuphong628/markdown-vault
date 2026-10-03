@@ -14,8 +14,8 @@ import {
   addSvgBackground,
   MERMAID_EXPORT_BACKGROUND,
   FlowNode,
-} from "../src/components/charts/mermaidGenerators";
-import { DIAGRAM_TEMPLATES } from "../src/components/charts/diagramTemplates";
+} from "../src/modules/content/shared/diagrams/mermaidGenerators";
+import { DIAGRAM_TEMPLATES } from "../src/modules/content/shared/diagrams/diagramTemplates";
 
 test("sanitizeLabel removes breaking quotes and brackets while preserving text", () => {
   const dirty = 'User [Admin] {Special} "Quote" (Test)';

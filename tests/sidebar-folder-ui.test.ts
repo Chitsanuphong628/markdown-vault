@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import Sidebar from "../src/components/Sidebar";
+import Sidebar from "../src/modules/notes/client/components/Sidebar";
 
 test("the sidebar hides child folders until their parent is opened without an inline move form", () => {
   const noop = async () => {};

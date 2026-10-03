@@ -4,9 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MailCheck, KeyRound, ArrowRight, ShieldCheck } from "lucide-react";
-import { AUTH_COPY } from "@/lib/authCopy";
-import LanguageToggle from "@/components/LanguageToggle";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
+import { AUTH_COPY } from "@/modules/identity/shared";
+import { LanguageToggle, useLanguagePreference } from "@/modules/app-shell/client";
 
 function VerifyEmailForm({ lang }: { lang: "en" | "th" }) {
   const router = useRouter();

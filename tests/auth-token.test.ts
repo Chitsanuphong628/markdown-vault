@@ -6,7 +6,7 @@ process.env.AUTH_TOKEN_PEPPER = "test-pepper-that-is-long-enough-for-the-auth-co
 process.env.JWT_SECRET = "test-jwt-secret-that-is-long-enough-for-the-auth-suite";
 
 test("one-time code is six digits and only matches its HMAC", async () => {
-  const { createOneTimeCode, hashOneTimeCode, matchesOneTimeCode } = await import("../src/lib/auth");
+  const { createOneTimeCode, hashOneTimeCode, matchesOneTimeCode } = await import("../src/modules/identity/server/auth");
   const code = createOneTimeCode();
   assert.match(code, /^\d{6}$/);
   const hash = hashOneTimeCode(code);
@@ -16,7 +16,7 @@ test("one-time code is six digits and only matches its HMAC", async () => {
 });
 
 test("session tokens carry the session version used for revocation", async () => {
-  const { signToken, verifyToken } = await import("../src/lib/auth");
+  const { signToken, verifyToken } = await import("../src/modules/identity/server/auth");
   const payload = { userId: "user-1", email: "user@example.com", sessionVersion: 4 };
   const token = signToken(payload);
   const legacyToken = jwt.sign(

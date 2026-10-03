@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCursorInstallUrl, isMcpEndpointReady, isMcpOAuthMetadataReady } from "../src/lib/mcp/connect";
+import { createCursorInstallUrl, isMcpEndpointReady, isMcpOAuthMetadataReady } from "../src/modules/mcp/client/connect";
 
 test("Cursor install URL contains only the named remote MCP server config", () => {
   const endpoint = "https://nota.example/api/mcp?source=ไทย&mode=1";

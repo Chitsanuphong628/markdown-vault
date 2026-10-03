@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import PwaServiceWorker from "@/components/PwaServiceWorker";
-import PwaZoomPolicy from "@/components/PwaZoomPolicy";
+import { PwaServiceWorker, PwaZoomPolicy } from "@/modules/app-shell/client";
 import "./globals.css";
 
 const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();

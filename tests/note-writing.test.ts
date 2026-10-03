@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NoteWriteCoordinator, type EditableNote } from "../src/lib/noteWriting";
+import { NoteWriteCoordinator, type EditableNote } from "../src/modules/notes/client/noteWriting";
 
 const initial: EditableNote = { id: "note-a", title: "A", content: "start", folderId: null, revision: 0 };
 

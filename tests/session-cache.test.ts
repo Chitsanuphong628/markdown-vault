@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 test("session cache hits and avoids db queries within TTL", async () => {
-  const { resolveUserFromPayload, clearSessionCache, sessionCache } = await import("../src/lib/auth");
+  const { resolveUserFromPayload, clearSessionCache, sessionCache } = await import("../src/modules/identity/server/auth");
   clearSessionCache();
 
   let dbQueries = 0;
@@ -37,7 +37,7 @@ test("session cache hits and avoids db queries within TTL", async () => {
 });
 
 test("session cache rejects and evicts when token sessionVersion does not match", async () => {
-  const { resolveUserFromPayload, clearSessionCache } = await import("../src/lib/auth");
+  const { resolveUserFromPayload, clearSessionCache } = await import("../src/modules/identity/server/auth");
   clearSessionCache();
 
   let dbQueries = 0;
@@ -65,7 +65,7 @@ test("session cache rejects and evicts when token sessionVersion does not match"
 });
 
 test("invalidateSessionUser explicitly removes user from session cache", async () => {
-  const { resolveUserFromPayload, invalidateSessionUser, clearSessionCache, sessionCache } = await import("../src/lib/auth");
+  const { resolveUserFromPayload, invalidateSessionUser, clearSessionCache, sessionCache } = await import("../src/modules/identity/server/auth");
   clearSessionCache();
 
   let dbQueries = 0;

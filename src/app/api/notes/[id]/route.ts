@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase";
-import { getSessionUser } from "@/lib/auth";
-import { assertOwnedFolder } from "@/lib/ownership";
-import { rejectCrossOrigin } from "@/lib/security";
-import { parseNoteTheme } from "@/lib/noteTheme";
+import { getSessionUser } from "@/modules/identity/server";
+import { rejectCrossOrigin } from "@/platform/server";
+import { deleteNoteForOwner, getNoteForOwner, NotesOperationError, updateNoteForOwner } from "@/modules/notes/server";
 import { z } from "zod";
 
 const notePatchSchema = z.object({
@@ -14,90 +12,57 @@ const notePatchSchema = z.object({
 }).refine((value) => value.title !== undefined || value.content !== undefined || value.folderId !== undefined, "No updates provided");
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id } = await params;
-
-  const { data: note, error } = await getSupabaseAdmin()
-    .from("Note")
-    .select("*, folder:Folder(name)")
-    .eq("id", id)
-    .eq("userId", user.id)
-    .single();
-
-  if (error || !note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
-
-  return NextResponse.json({ note });
+  try {
+    const note = await getNoteForOwner(user.id, id);
+    if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    return NextResponse.json({ note });
+  } catch {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
 }
 
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const originError = rejectCrossOrigin(req);
   if (originError) return originError;
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id } = await params;
 
   try {
     const parsed = notePatchSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid note update" }, { status: 400 });
-    const { title, content, folderId, revision } = parsed.data;
-    if (folderId !== undefined && !(await assertOwnedFolder(folderId, user.id))) {
-      return NextResponse.json({ error: "Folder not found" }, { status: 404 });
-    }
-
-    const updateData: Record<string, string | number | null> = { updatedAt: new Date().toISOString(), revision: revision + 1 };
-    if (title !== undefined) updateData.title = title;
-    if (content !== undefined) {
-      updateData.content = content;
-      updateData.themeColor = parseNoteTheme(content).color;
-    }
-    if (folderId !== undefined) updateData.folderId = folderId || null;
-
-    const { data: note, error } = await getSupabaseAdmin()
-      .from("Note")
-      .update(updateData)
-      .eq("id", id)
-      .eq("userId", user.id)
-      .eq("revision", revision)
-      .select("*, folder:Folder(name)")
-      .single();
-
-    if (error || !note) return NextResponse.json({ error: "Note was changed by another session" }, { status: 409 });
+    const note = await updateNoteForOwner(user.id, id, parsed.data);
+    if (!note) return NextResponse.json({ error: "Note was changed by another session" }, { status: 409 });
     return NextResponse.json({ note });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    if (error instanceof NotesOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update note" }, { status: 500 });
   }
 }
 
 export async function DELETE(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const originError = rejectCrossOrigin(req);
   if (originError) return originError;
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id } = await params;
 
   try {
-    const { error } = await getSupabaseAdmin()
-      .from("Note")
-      .delete()
-      .eq("id", id)
-      .eq("userId", user.id);
-
-    if (error) throw error;
+    await deleteNoteForOwner(user.id, id);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to delete note" }, { status: 500 });
   }
 }

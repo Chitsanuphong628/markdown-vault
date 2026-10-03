@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimEditorTabId, discardNoteDraft, getNoteDraftKey, isNoteDraftFromCurrentEditor, listNoteDrafts, readNoteDraft, refreshEditorTabLease, releaseEditorTabLease, saveNoteDraft, selectNoteDraftForEditor, type NoteDraftRecord, type StorageLike } from "../src/lib/noteDraftStore";
+import { claimEditorTabId, discardNoteDraft, getNoteDraftKey, isNoteDraftFromCurrentEditor, listNoteDrafts, readNoteDraft, refreshEditorTabLease, releaseEditorTabLease, saveNoteDraft, selectNoteDraftForEditor, type NoteDraftRecord, type StorageLike } from "../src/modules/notes/client/noteDraftStore";
 
 function memoryStorage(): StorageLike {
   const values = new Map<string, string>();

@@ -1,31 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendMarkdownBlock, editMarkdownSelection, getLatestNoteDraftContent, isSafeImageUrl, isNoteDraftDirty } from "../src/lib/markdownEditing";
+import { appendMarkdownBlock, editMarkdownSelection, isSafeImageUrl, isNoteDraftDirty } from "../src/modules/content/shared/markdownEditing";
 
 test("appends inserted Markdown as a separate block for empty and populated notes", () => {
   assert.equal(appendMarkdownBlock("", "```mermaid\ngraph TD\n```"), "```mermaid\ngraph TD\n```\n");
   assert.equal(appendMarkdownBlock("# Note\n\nText\n", "```mermaid\ngraph TD\n```"), "# Note\n\nText\n\n```mermaid\ngraph TD\n```\n");
-});
-
-test("reads the latest visual draft by flushing before caller-side content changes", () => {
-  let flushCount = 0;
-  const content = getLatestNoteDraftContent("visual", "stale", {
-    flush: () => {
-      flushCount += 1;
-      return "latest";
-    },
-  });
-
-  assert.equal(content, "latest");
-  assert.equal(flushCount, 1);
-});
-
-test("keeps the Markdown draft as the source of truth in Markdown mode", () => {
-  const content = getLatestNoteDraftContent("markdown", "latest source", {
-    flush: () => { throw new Error("visual editor must not be flushed"); },
-  });
-
-  assert.equal(content, "latest source");
 });
 
 test("formatting selected text preserves the surrounding Markdown exactly", () => {

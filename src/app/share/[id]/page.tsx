@@ -3,11 +3,11 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import { MarkdownViewer } from "@/modules/content/client";
 import { ArrowLeft, Lock, Loader2 } from "lucide-react";
-import { AUTH_COPY } from "@/lib/authCopy";
-import { useLanguagePreference } from "@/lib/useLanguagePreference";
-import LanguageToggle from "@/components/LanguageToggle";
+import { AUTH_COPY } from "@/modules/identity/shared";
+import { useLanguagePreference } from "@/modules/app-shell/client";
+import { LanguageToggle } from "@/modules/app-shell/client";
 
 interface SharePageProps {
   params: Promise<{ id: string }>;
